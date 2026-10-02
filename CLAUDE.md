@@ -140,3 +140,8 @@ def attribute(holdings_path, benchmark_path, start, end, data_dir="data", out_di
 ---
 
 ## Amendments
+
+1. Python 3.12 everywhere. The lock is built with `uv pip compile pyproject.toml --extra dev --universal --python-version 3.12 -o requirements-lock.txt`, and every venv with `uv venv --python 3.12` (`instructions/01_section_1.md`, Section B, OPEN-04).
+2. Build backend: `[build-system] requires = ["setuptools>=68"]`, `build-backend = "setuptools.build_meta"`; `[tool.setuptools] packages = ["attrib"]` (`instructions/01_section_1.md`, Section B, OPEN-03).
+3. `EdgarClient.__init__(self, user_agent: str, min_interval: float, retries: int, backoff: Sequence[float], session=None)`; `len(backoff)` must equal `retries`, else `ValueError` (`instructions/01_section_1.md`, Section B, OPEN-06).
+4. OPEN-01 to OPEN-30 are decided in `instructions/01_section_1.md` Section B; that table is binding.
