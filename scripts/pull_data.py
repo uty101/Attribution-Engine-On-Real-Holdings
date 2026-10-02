@@ -5,6 +5,7 @@
     python scripts/pull_data.py --stage figi
     python scripts/pull_data.py --stage sec
     python scripts/pull_data.py --stage french
+    python scripts/pull_data.py --stage prices
 
 Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
 `--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
@@ -31,7 +32,10 @@ from pathlib import Path
 import lxml
 import numpy
 import pandas as pd
+import pyarrow
 import requests
+import yfinance
+import yfinance.shared
 from lxml import etree
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +43,7 @@ sys.path.insert(0, str(ROOT))
 
 import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
-from attrib.mapping import norm_ticker  # noqa: E402
+from attrib.mapping import norm_ticker, security_map_from_dir  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
     EdgarClient,
@@ -80,6 +84,8 @@ FRENCH_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
 FRENCH_FILES = {"F-F_Research_Data_5_Factors_2x3_CSV.zip": "ff5_monthly.csv", "F-F_Momentum_Factor_CSV.zip": "mom_monthly.csv"}
 # Not SEC_USER_AGENT: that header carries the owner's email and is for EDGAR only (rule 15)
 FRENCH_USER_AGENT = "attrib-data-pull"
+# instructions/02_section_2.md, B: yfinance batches of 50 tickers in sorted order
+PRICE_BATCH = 50
 
 
 def sha256(b: bytes) -> str:
@@ -285,6 +291,82 @@ def stage_french(cfg) -> None:
     print(f"Siccodes12.zip -> {name} -> Siccodes12.txt, {len(b)} bytes")
 
 
+def yf_close(tickers: list[str], cfg) -> tuple[pd.DataFrame, dict]:
+    """1 yfinance `download` call for `tickers` (instructions/02, B), retried once if it raises.
+
+    Returns the adjusted close (`auto_adjust=True` puts it in `Close`), 1 column per ticker, and
+    yfinance's per-ticker error messages.
+    """
+    yf = yfinance
+
+    for attempt in (1, 2):
+        try:
+            df = yf.download(
+                tickers, start=str(cfg.sample.price_start), end=str(cfg.sample.price_end_exclusive),
+                auto_adjust=True, actions=False, threads=False, progress=False,
+            )
+            break
+        except Exception as exc:  # noqa: BLE001 - any failure of the batch counts (instructions/02, B)
+            print(f"batch {tickers[0]}..{tickers[-1]} raised on try {attempt}: {type(exc).__name__}: {exc}")
+            if attempt == 2:
+                sys.exit("stop under rule 4: a yfinance batch raised twice")
+    errors = dict(yfinance.shared._ERRORS)
+    close = df["Close"] if df is not None and not df.empty else pd.DataFrame()
+    return close, errors
+
+
+def _series(close: pd.DataFrame, t: str) -> pd.Series:
+    if t not in close.columns:
+        return pd.Series(dtype="float64")
+    s = close[t].dropna().astype("float64")
+    s.index = pd.DatetimeIndex(s.index).tz_localize(None).normalize()
+    return s.rename(t)
+
+
+def stage_prices(cfg) -> None:
+    """adjclose.parquet for every yf_ticker in SECURITY_MAP, missing.csv, nav_adjclose.csv (kickoff 3.2)."""
+    smap = security_map_from_dir(ROOT / "data")
+    smap = smap[smap["yf_ticker"] != ""]
+    sec_ids = smap.groupby("yf_ticker")["sec_id"].agg(lambda s: ";".join(sorted(s)))
+    tickers = sorted(sec_ids.index)
+    print(f"{len(tickers)} yf_tickers in batches of {PRICE_BATCH}")
+    got, missing = [], []
+    for i in range(0, len(tickers), PRICE_BATCH):
+        batch = tickers[i : i + PRICE_BATCH]
+        close, errors = yf_close(batch, cfg)
+        for t in batch:
+            s = _series(close, t)
+            if s.empty:
+                missing.append(t)
+                print(f"  no rows: {t} ({errors.get(t, 'no yfinance error recorded')})")
+            else:
+                got.append(s)
+        print(f"  {i + len(batch)} / {len(tickers)}", flush=True)
+    panel = pd.concat(got, axis=1).sort_index()
+    panel = panel[sorted(panel.columns)].astype("float64")
+    panel.index.name = "date"
+    path = RAW / "prices" / "adjclose.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    panel.to_parquet(path, engine="pyarrow", index=True)
+    write_csv(pd.DataFrame({"yf_ticker": missing, "sec_ids": [sec_ids[t] for t in missing]}),
+              RAW / "prices" / "missing.csv")
+    print(f"panel {panel.shape}, {panel.index[0].date()} to {panel.index[-1].date()}, {len(missing)} missing")
+
+    nav_tickers = [cfg.entities[e].nav_ticker for e in cfg.entities if cfg.entities[e].type == "fund"]
+    nav_tickers += [cfg.entities[e].etf_ticker for e in cfg.entities if cfg.entities[e].type == "benchmark"]
+    close, errors = yf_close(nav_tickers, cfg)
+    cols = [_series(close, t) for t in nav_tickers]
+    empty = [t for t, s in zip(nav_tickers, cols) if s.empty]
+    if empty:
+        sys.exit(f"stop under rule 4: yfinance returned no data for {empty}: {errors}")
+    nav = pd.concat(cols, axis=1).sort_index()[nav_tickers]
+    nav.index = nav.index.strftime("%Y-%m-%d")
+    nav.index.name = "date"
+    write_csv(nav.reset_index(), RAW / "prices" / "nav_adjclose.csv")
+    print(nav.apply(lambda s: pd.Series({"first": s.first_valid_index(), "last": s.last_valid_index(),
+                                         "n": s.notna().sum()})).to_string())
+
+
 def resolve_series(mf: dict, ticker: str) -> dict:
     """The 1 row of company_tickers_mf.json for `ticker` (fields cik, seriesId, classId, symbol)."""
     hits = [dict(zip(mf["fields"], r)) for r in mf["data"] if r[mf["fields"].index("symbol")] == ticker]
@@ -415,6 +497,8 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
         "numpy": numpy.__version__,
         "pandas": pd.__version__,
         "requests": requests.__version__,
+        "pyarrow": pyarrow.__version__,
+        "yfinance": yfinance.__version__,
     }
     files = sorted(p for p in RAW.rglob("*") if p.is_file() and p.name not in ("MANIFEST.json", ".gitkeep"))
     m["sha256"] = {p.relative_to(RAW).as_posix(): sha256(p.read_bytes()) for p in files}
@@ -428,12 +512,16 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french"])
+    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices"])
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
     if args.stage == "figi":
         stage_figi(cfg)
         update_manifest("figi")
+        return
+    if args.stage == "prices":
+        stage_prices(cfg)
+        update_manifest("prices")
         return
     if args.stage == "french":
         stage_french(cfg)
