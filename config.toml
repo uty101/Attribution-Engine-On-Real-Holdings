@@ -2,7 +2,7 @@
 bootstrap_seed = 20261002
 
 [sample]
-first_holdings_date = "2019-03-31"
+first_holdings_date = "2019-09-30"
 last_holdings_date = "2026-06-30"
 last_return_date = "2026-09-30"
 price_start = "2015-12-01"
