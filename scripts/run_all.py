@@ -30,6 +30,7 @@ from attrib.edgar import (  # noqa: E402
     select_nport_filing,
     units_check,
 )
+from attrib.mapping import security_map_from_dir  # noqa: E402
 
 RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
@@ -165,7 +166,14 @@ def section_1(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1}
+def section_2(cfg) -> list[str]:
+    """SECURITY_MAP to data/processed/security_map.csv (step 2.2)."""
+    smap = security_map_from_dir(ROOT / "data")
+    write_csv(smap, PROCESSED / "security_map.csv")
+    return []
+
+
+SECTIONS = {1: section_1, 2: section_2}
 
 
 def main() -> None:

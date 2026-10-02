@@ -4,6 +4,7 @@
     python scripts/pull_data.py --stage edgar
     python scripts/pull_data.py --stage figi
     python scripts/pull_data.py --stage sec
+    python scripts/pull_data.py --stage french
 
 Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
 `--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
@@ -16,11 +17,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import platform
+import re
 import sys
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +39,7 @@ sys.path.insert(0, str(ROOT))
 
 import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
+from attrib.mapping import norm_ticker  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
     EdgarClient,
@@ -71,6 +76,10 @@ OPENFIGI_MAPPING = [
     "market_sector", "security_type",
 ]
 SIC_CSV = ["cik", "name", "sic", "sic_description"]
+FRENCH_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
+FRENCH_FILES = {"F-F_Research_Data_5_Factors_2x3_CSV.zip": "ff5_monthly.csv", "F-F_Momentum_Factor_CSV.zip": "mom_monthly.csv"}
+# Not SEC_USER_AGENT: that header carries the owner's email and is for EDGAR only (rule 15)
+FRENCH_USER_AGENT = "attrib-data-pull"
 
 
 def sha256(b: bytes) -> str:
@@ -211,11 +220,6 @@ def stage_figi(cfg) -> None:
     print(f"{client.n_retries} retries")
 
 
-def norm_ticker(t: str) -> str:
-    """Kickoff 5.2: `-` and `/` both normalised to `-` before the exact ticker match."""
-    return t.replace("/", "-")
-
-
 def stage_sec(cfg, client: EdgarClient) -> None:
     """company_tickers.json as downloaded, and sic.csv for every CIK reachable by ticker -> CIK.
 
@@ -243,6 +247,42 @@ def stage_sec(cfg, client: EdgarClient) -> None:
         if n % 250 == 0:
             print(f"  {n + 1} / {len(ciks)}", flush=True)
     write_csv(pd.DataFrame(rows, columns=SIC_CSV), RAW / "sec" / "sic.csv")
+
+
+def monthly_block(text: str) -> str:
+    """The monthly block of a French CSV: its column header line (starting with `,`) and the
+    YYYYMM rows under it, up to the first line that is not one. Lines kept as filed, LF endings."""
+    lines = text.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(","))
+    out = [lines[start]]
+    for line in lines[start + 1 :]:
+        if not re.match(r"^\s*\d{6}\s*,", line):
+            break
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def unzip_one(b: bytes) -> tuple[str, bytes]:
+    with zipfile.ZipFile(io.BytesIO(b)) as z:
+        names = z.namelist()
+        if len(names) != 1:
+            sys.exit(f"stop under rule 4: expected 1 file in the zip, found {names}")
+        return names[0], z.read(names[0])
+
+
+def stage_french(cfg) -> None:
+    """Kickoff 3.2: the monthly blocks of the 5-factor and momentum files, and Siccodes12.txt."""
+    e = cfg.edgar
+    client = EdgarClient(FRENCH_USER_AGENT, e.min_interval_s, e.retries, e.backoff_s, e.timeout_s)
+    for zname, out in FRENCH_FILES.items():
+        name, b = unzip_one(client.get_bytes(FRENCH_URL + zname))
+        block = monthly_block(b.decode("latin-1"))
+        write_bytes(RAW / "french" / out, block.encode("utf-8"))
+        rows = block.splitlines()
+        print(f"{zname} -> {name} -> {out}: header {rows[0]!r}, {len(rows) - 1} months, {rows[1][:6]} to {rows[-1][:6]}")
+    name, b = unzip_one(client.get_bytes(FRENCH_URL + "Siccodes12.zip"))
+    write_bytes(RAW / "french" / "Siccodes12.txt", b)
+    print(f"Siccodes12.zip -> {name} -> Siccodes12.txt, {len(b)} bytes")
 
 
 def resolve_series(mf: dict, ticker: str) -> dict:
@@ -388,12 +428,16 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec"])
+    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french"])
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
     if args.stage == "figi":
         stage_figi(cfg)
         update_manifest("figi")
+        return
+    if args.stage == "french":
+        stage_french(cfg)
+        update_manifest("french")
         return
     client = client_from_env(cfg)
     if args.stage == "fixtures":
