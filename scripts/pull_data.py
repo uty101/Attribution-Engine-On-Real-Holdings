@@ -23,6 +23,7 @@ import lxml
 import numpy
 import pandas as pd
 import requests
+from lxml import etree
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -68,10 +69,16 @@ def write_json(path: Path, obj) -> None:
     write_bytes(path, (json.dumps(obj, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
 
+def submission_type(xml: bytes) -> str:
+    """The form as filed (NPORT-P or NPORT-P/A), from the `submissionType` header element."""
+    root = etree.fromstring(xml, etree.XMLParser(huge_tree=True, resolve_entities=False))
+    return next(((el.text or "").strip() for el in root.iter("{*}submissionType")), "")
+
+
 def write_csv(df: pd.DataFrame, path: Path) -> None:
-    """Rule 9: %.10g floats, LF, UTF-8, no index."""
+    """Rule 9 as amended by instructions/01b: %.17g floats, LF, UTF-8, no index."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, float_format="%.10g", lineterminator="\n", encoding="utf-8")
+    df.to_csv(path, index=False, float_format="%.17g", lineterminator="\n", encoding="utf-8")
 
 
 def client_from_env(cfg) -> EdgarClient:
@@ -143,8 +150,8 @@ def stage_fixtures(cfg, client: EdgarClient) -> None:
 def stage_edgar(cfg, client: EdgarClient) -> dict:
     """Filings lists, 13F information tables and N-PORT holdings for all 5 entities.
 
-    Returns the sha256 of every downloaded but uncommitted N-PORT XML, keyed by its path
-    as if it were under data/raw/.
+    Returns the url, sha256 and form of every downloaded but uncommitted N-PORT XML, keyed by
+    its path as if it were under data/raw/.
     """
     H = {str(d) for d in holdings_dates(cfg)}
     mf_bytes = client.get_bytes(MF_TICKERS_URL)
@@ -194,7 +201,10 @@ def stage_edgar(cfg, client: EdgarClient) -> dict:
                 sys.exit(f"stop under rule 4: {url} has seriesId {header['seriesId']}, expected {sr['series_id']}")
             filings.loc[i, "period_date"] = header["repPdDate"]
             rel = f"edgar/nport/{eid}/{header['repPdDate']}_{f['accession']}.xml"
-            uncommitted[rel] = {"url": url, "sha256": sha256(b)}
+            uncommitted[rel] = {"url": url, "sha256": sha256(b), "form": submission_type(b)}
+            if uncommitted[rel]["form"] != "NPORT-P":
+                print(f"{eid}: {uncommitted[rel]['form']} {f['accession']} filed {f['filing_date']} "
+                      f"for period {header['repPdDate']}")
             if header["repPdDate"] in H:
                 raws.append(raw.assign(entity=eid, accession=f["accession"]))
         write_csv(filings, RAW / "edgar" / "nport" / f"filings_{eid}.csv")

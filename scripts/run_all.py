@@ -45,9 +45,9 @@ NPORT_PCT_LO, NPORT_PCT_HI = 95.0, 101.0
 
 
 def write_csv(df: pd.DataFrame, path: Path) -> None:
-    """Rule 9: %.10g floats, LF, UTF-8, no index."""
+    """Rule 9 as amended by instructions/01b: %.17g floats, LF, UTF-8, no index."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, float_format="%.10g", lineterminator="\n", encoding="utf-8")
+    df.to_csv(path, index=False, float_format="%.17g", lineterminator="\n", encoding="utf-8")
 
 
 def read_str_csv(path: Path) -> pd.DataFrame:

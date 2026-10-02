@@ -7,15 +7,15 @@
     "requests": "2.34.2"
   },
   "pulled_at_utc": {
-    "edgar": "2026-10-02T16:54:31Z"
+    "edgar": "2026-10-02T18:11:25Z"
   },
   "row_counts": {
     "edgar/13f/filings_akre.csv": 125,
     "edgar/13f/filings_jensen.csv": 117,
     "edgar/13f/filings_polen.csv": 117,
-    "edgar/nport/filings_ivv.csv": 28,
+    "edgar/nport/filings_ivv.csv": 29,
     "edgar/nport/filings_iwf.csv": 28,
-    "edgar/nport/holdings_ivv.csv": 14203,
+    "edgar/nport/holdings_ivv.csv": 14710,
     "edgar/nport/holdings_iwf.csv": 12862,
     "sec/series_resolved.csv": 2
   },
@@ -119,235 +119,296 @@
     "edgar/13f/polen/2025-12-31_0001172661-26-000654.xml": "35f2a5eddcf32d3b9061f6593842cd293e92ea882417e8cdc4507d812a17fd7e",
     "edgar/13f/polen/2026-03-31_0001172661-26-001911.xml": "83e4a40d6ed629836e2cb0ce7801aafdedd4891019461cb429a17bb4213bf5b0",
     "edgar/13f/polen/2026-06-30_0001172661-26-003035.xml": "6899ef1afa5377ed531f5eaeaa80f504b7c21efe72642cbbacd1ec1b06b7d063",
-    "edgar/nport/filings_ivv.csv": "6ad691e8b4f72df1a5fd94341247a5681e08f455dba64989319e23fdd37a8991",
+    "edgar/nport/filings_ivv.csv": "f2c07eb460da3ae58451cd0868b11c0a65b3bbaa4f1f4ec31fb2685ef0329616",
     "edgar/nport/filings_iwf.csv": "d27212d049000ee3e1851fb737b6cbdf92d35108f522de68c23cfc868006e6f0",
-    "edgar/nport/holdings_ivv.csv": "14c791b34cb28f4943119cfab9709c5358bedda4755de02f48d623abe19eb440",
-    "edgar/nport/holdings_iwf.csv": "053d197f961f4eee4bd534e3d59f66bb58849a1bc802b6aaca702630db1f2c6a",
+    "edgar/nport/holdings_ivv.csv": "f6f5ca6423422e8326f9b6daed7f1d5d651f0f0f896dbe6ab61e9a121892f84b",
+    "edgar/nport/holdings_iwf.csv": "6efecac85f70cb9ea13258d4bd003631f572a4a7f887561f9c03c0d3a88976e9",
     "sec/company_tickers_mf.json": "f17facb023662f07c36a4809b6a65e65cd336eb3afae8e160d2b665cbe536c38",
     "sec/series_resolved.csv": "dce782156fc755c8edc0422e3dd432b8da622639e7da94bce013929c5cf4ea5e"
   },
   "uncommitted_sha256": {
     "edgar/nport/ivv/2019-09-30_0001752724-19-177847.xml": {
+      "form": "NPORT-P",
       "sha256": "a8ad5728461a9ae02699c276accdccb7a865a15140a31a2cddcebfe7a1b64418",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272419177847/primary_doc.xml"
     },
     "edgar/nport/ivv/2019-12-31_0001752724-20-038725.xml": {
+      "form": "NPORT-P",
       "sha256": "436a491e534ef88d51249581a2acaa34b6deb8b056ad9f3561ec26658cff4deb",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420038725/primary_doc.xml"
     },
     "edgar/nport/ivv/2020-03-31_0001752724-20-112027.xml": {
+      "form": "NPORT-P",
       "sha256": "4c99610a77d3e073a708710c1477652d87f9ce68f315afa27185e16e22d463bb",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420112027/primary_doc.xml"
     },
     "edgar/nport/ivv/2020-06-30_0001752724-20-176909.xml": {
+      "form": "NPORT-P",
       "sha256": "f8c05eadc5b70080b181deaa88d0ecba3745aaaf2226ae48186b8d6383d00770",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420176909/primary_doc.xml"
     },
     "edgar/nport/ivv/2020-09-30_0001752724-20-247818.xml": {
+      "form": "NPORT-P",
       "sha256": "406e2973c57d0af17ecafc5feef7063c1bc5c1da1d3d29f6dcbe7e90ad51ee15",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420247818/primary_doc.xml"
     },
     "edgar/nport/ivv/2020-12-31_0001752724-21-040719.xml": {
+      "form": "NPORT-P",
       "sha256": "9a7586edadcce2c0b90f5aa08f281cf8098a09cbad5cff0b54eb769e422f4afc",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421040719/primary_doc.xml"
     },
     "edgar/nport/ivv/2021-03-31_0001752724-21-116363.xml": {
+      "form": "NPORT-P",
       "sha256": "4f10902d236dc0ea71dda6789a1dd47edab706beac5aa5000ecc1e31cd5e1e2e",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421116363/primary_doc.xml"
     },
     "edgar/nport/ivv/2021-06-30_0001752724-21-186201.xml": {
+      "form": "NPORT-P",
       "sha256": "580584dca74ffabfbcb0b3733c664c476838a0a0986115ca4243c98c1a7d0a62",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421186201/primary_doc.xml"
     },
     "edgar/nport/ivv/2021-09-30_0001752724-21-255857.xml": {
+      "form": "NPORT-P",
       "sha256": "9c6b17b707e6d60232d2227655a64998b919b91e9c6f085e8fd3cdd5031cebc8",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421255857/primary_doc.xml"
     },
     "edgar/nport/ivv/2021-12-31_0001752724-22-046281.xml": {
+      "form": "NPORT-P",
       "sha256": "d9ea9f4ad33589364a8fb0b061ef3686f0b2c7dd3c2a5bfe35ddca1249875546",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422046281/primary_doc.xml"
     },
     "edgar/nport/ivv/2022-03-31_0001752724-22-122805.xml": {
+      "form": "NPORT-P",
       "sha256": "a430f88ae10cb7f0a1d5caa1d864e6ef57edd21845e35276bfc8502880f12c3f",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422122805/primary_doc.xml"
     },
     "edgar/nport/ivv/2022-06-30_0001752724-22-193652.xml": {
+      "form": "NPORT-P",
       "sha256": "aef1dfc3287356459f79a9331ea15d473b8cf2a5add863098fcf22ed51912294",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422193652/primary_doc.xml"
     },
     "edgar/nport/ivv/2022-09-30_0001752724-22-268673.xml": {
+      "form": "NPORT-P",
       "sha256": "86aaa8b4f08c5e9c2b9192bf895f09da509220cd185abdfd8cce6256e30fbae3",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422268673/primary_doc.xml"
     },
     "edgar/nport/ivv/2022-12-31_0001752724-23-039243.xml": {
+      "form": "NPORT-P",
       "sha256": "cbedf22f3dcc4125c0101577e34094e5ebc23b40f35e4a0524f8cad053e606fe",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423039243/primary_doc.xml"
     },
     "edgar/nport/ivv/2023-03-31_0001752724-23-123220.xml": {
+      "form": "NPORT-P",
       "sha256": "6985b68805b64f7a5855c9c6e1b8b3a69bc733f508164d66b686d769f39efdf4",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423123220/primary_doc.xml"
     },
     "edgar/nport/ivv/2023-06-30_0001752724-23-191503.xml": {
+      "form": "NPORT-P",
       "sha256": "880c14e3a7f46ae08e7953d41d5809178bd9bcae13c5461f9bb71a0f944543eb",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423191503/primary_doc.xml"
     },
     "edgar/nport/ivv/2023-09-30_0001752724-23-264277.xml": {
+      "form": "NPORT-P",
       "sha256": "2c05fb9a33bce24b332529b02a1b8e9c929f737bdb1343b9d5731526bbf1420c",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423264277/primary_doc.xml"
     },
     "edgar/nport/ivv/2023-12-31_0001752724-24-043113.xml": {
+      "form": "NPORT-P",
       "sha256": "09392c3b791f8362b1417132174aa0d4638eef1540fa38f5a931c08a5f997841",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424043113/primary_doc.xml"
     },
     "edgar/nport/ivv/2024-03-31_0001752724-24-123331.xml": {
+      "form": "NPORT-P",
       "sha256": "1a47c29eb9170b35676891faa6e589c1b3beeb449130680b6905c52524fe3ee5",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424123331/primary_doc.xml"
     },
     "edgar/nport/ivv/2024-06-30_0001752724-24-194289.xml": {
+      "form": "NPORT-P",
       "sha256": "90f811e92de7400b7f97badf4db3a635d6053c5b9de304a34e271b09508249d2",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424194289/primary_doc.xml"
     },
     "edgar/nport/ivv/2024-09-30_0001752724-24-269943.xml": {
+      "form": "NPORT-P",
       "sha256": "8ac677d7db72db7f73808cf46115c6629f9accb3273287ca2be863ef9ea4e33e",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424269943/primary_doc.xml"
     },
     "edgar/nport/ivv/2024-12-31_0001752724-25-043800.xml": {
+      "form": "NPORT-P",
       "sha256": "68398fe4f2bd7602650fb68e8f7192ac3119ef4a281f4a4c758cc5abe1ad1f49",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425043800/primary_doc.xml"
     },
     "edgar/nport/ivv/2025-03-31_0001752724-25-119791.xml": {
+      "form": "NPORT-P",
       "sha256": "5c131afc756820cc7b4b89f8eb9cd2445624ce26da0e601dfa064de1b4911571",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425119791/primary_doc.xml"
     },
     "edgar/nport/ivv/2025-06-30_0001752724-25-210389.xml": {
+      "form": "NPORT-P",
       "sha256": "55308af31eda702c5b1033a868cfe66f02f578aa6215a081f01bf13cf0a94c7f",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425210389/primary_doc.xml"
     },
     "edgar/nport/ivv/2025-09-30_0002071691-25-007634.xml": {
+      "form": "NPORT-P",
       "sha256": "f77988290be2e35e0b553f7f4146b182a97e0d659689455adb766aba930c0b1e",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000207169125007634/primary_doc.xml"
     },
+    "edgar/nport/ivv/2025-09-30_0002071691-26-015790.xml": {
+      "form": "NPORT-P/A",
+      "sha256": "4732db6d3bbc5c16dfe777de3c8a9ea88260a9e4bb22eea14edccdb9a6b37104",
+      "url": "https://www.sec.gov/Archives/edgar/data/1100663/000207169126015790/primary_doc.xml"
+    },
     "edgar/nport/ivv/2025-12-31_0002071691-26-004238.xml": {
+      "form": "NPORT-P",
       "sha256": "146ce98ea43e10ae2d729ca663f07cb4a7728907a671c6f3b2b7ee3fb0219c31",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000207169126004238/primary_doc.xml"
     },
     "edgar/nport/ivv/2026-03-31_0002071691-26-012459.xml": {
+      "form": "NPORT-P",
       "sha256": "b7acb48358d9d7d52ba45955b46442570e1d3b92c6c6d8386756fbf2aa806a00",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000207169126012459/primary_doc.xml"
     },
     "edgar/nport/ivv/2026-06-30_0002071691-26-019760.xml": {
+      "form": "NPORT-P",
       "sha256": "9924e5b86bf304d0c2d24679e15642b681de6605ed38ca8b1bb1db7aa5b3b7e9",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000207169126019760/primary_doc.xml"
     },
     "edgar/nport/iwf/2019-09-30_0001752724-19-177844.xml": {
+      "form": "NPORT-P",
       "sha256": "ec1c5c8ba57a2db0481b34127763448ad7391ffc702e90ffb895f9ef2dad9450",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272419177844/primary_doc.xml"
     },
     "edgar/nport/iwf/2019-12-31_0001752724-20-038663.xml": {
+      "form": "NPORT-P",
       "sha256": "737cd39191713ea7d4a05ecd46cd2d04f27437e070d29c3e918fa0a58f7edb46",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420038663/primary_doc.xml"
     },
     "edgar/nport/iwf/2020-03-31_0001752724-20-112153.xml": {
+      "form": "NPORT-P",
       "sha256": "67b952911581842d15773d0de6d644bd1d9f195a511c3d389dec71701d619e0e",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420112153/primary_doc.xml"
     },
     "edgar/nport/iwf/2020-06-30_0001752724-20-176978.xml": {
+      "form": "NPORT-P",
       "sha256": "373539ef678358e6b4bcc03466afb0de67f0f2f7c1c6e819841cf14ab811e82f",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420176978/primary_doc.xml"
     },
     "edgar/nport/iwf/2020-09-30_0001752724-20-247763.xml": {
+      "form": "NPORT-P",
       "sha256": "cb6112d312c84710e156ab21e4f98edf1f025c93e1389c0094219e0f35a59842",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272420247763/primary_doc.xml"
     },
     "edgar/nport/iwf/2020-12-31_0001752724-21-040696.xml": {
+      "form": "NPORT-P",
       "sha256": "832567ac1426e1f0d686a59ac32fed5474529ed391dab4eaf87726f5df7aa69a",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421040696/primary_doc.xml"
     },
     "edgar/nport/iwf/2021-03-31_0001752724-21-116383.xml": {
+      "form": "NPORT-P",
       "sha256": "82dff5b503a7a985c4598ff01032eb970f39452481e10305f9f99f22e5641db4",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421116383/primary_doc.xml"
     },
     "edgar/nport/iwf/2021-06-30_0001752724-21-186226.xml": {
+      "form": "NPORT-P",
       "sha256": "1c0e91d019ca8c1729112ea56f8722b38810e5d2ec8c2902bd960562363316ea",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421186226/primary_doc.xml"
     },
     "edgar/nport/iwf/2021-09-30_0001752724-21-255846.xml": {
+      "form": "NPORT-P",
       "sha256": "9ec0326b29f83372fee7b4f368dcbb781de98d5022b2a0a089dd0424527636ba",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272421255846/primary_doc.xml"
     },
     "edgar/nport/iwf/2021-12-31_0001752724-22-046298.xml": {
+      "form": "NPORT-P",
       "sha256": "34928ebfb4f5fe0a76edfc43ce8dd71ae5edb31555f4ad7ede34980155a8d210",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422046298/primary_doc.xml"
     },
     "edgar/nport/iwf/2022-03-31_0001752724-22-122801.xml": {
+      "form": "NPORT-P",
       "sha256": "e088b1325ef41ceb873267a92c2e73e600047e71952f8e2b4589742f84a5afe4",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422122801/primary_doc.xml"
     },
     "edgar/nport/iwf/2022-06-30_0001752724-22-193669.xml": {
+      "form": "NPORT-P",
       "sha256": "346a9b27709462ad9a6bda56042bd8962e2ff01ab98c5b7f807c5819f6680f10",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422193669/primary_doc.xml"
     },
     "edgar/nport/iwf/2022-09-30_0001752724-22-269723.xml": {
+      "form": "NPORT-P",
       "sha256": "659df25bf856681d908fe5cb70f35f3488939c4261ef130f9d1d50838a3b95fb",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272422269723/primary_doc.xml"
     },
     "edgar/nport/iwf/2022-12-31_0001752724-23-039553.xml": {
+      "form": "NPORT-P",
       "sha256": "dc53ee178139caaa1d5180a608e5342d15e92e1c5eee96632fc11559bb8c903e",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423039553/primary_doc.xml"
     },
     "edgar/nport/iwf/2023-03-31_0001752724-23-114945.xml": {
+      "form": "NPORT-P",
       "sha256": "bcf46c9aca66dd401c3ab1319360a4cd8395560899e55dc8deac16d3168a4720",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423114945/primary_doc.xml"
     },
     "edgar/nport/iwf/2023-06-30_0001752724-23-192397.xml": {
+      "form": "NPORT-P",
       "sha256": "5e59a3763f290d47fdd119842237cd849e07a80749dbfef043503bb7786c8a42",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423192397/primary_doc.xml"
     },
     "edgar/nport/iwf/2023-09-30_0001752724-23-265163.xml": {
+      "form": "NPORT-P",
       "sha256": "a4d0f8d2f11f078390fd1458243487ebdb52d9b36517b1b01865cd0dda9d4d2f",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423265163/primary_doc.xml"
     },
     "edgar/nport/iwf/2023-12-31_0001752724-24-034941.xml": {
+      "form": "NPORT-P",
       "sha256": "73d298390e6d4f931bea1586a60d3ac03bc26027aad8649384873ac54054f085",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424034941/primary_doc.xml"
     },
     "edgar/nport/iwf/2024-03-31_0001752724-24-118346.xml": {
+      "form": "NPORT-P",
       "sha256": "85ecba30ed96e0648c3944141615aa690b8dde64ae8270e6cedde85d0b6012dd",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424118346/primary_doc.xml"
     },
     "edgar/nport/iwf/2024-06-30_0001752724-24-189692.xml": {
+      "form": "NPORT-P",
       "sha256": "6dd63fe7444ddd83d1f54902c2ebd2927239206f0fdfdc86247f1bd078f75316",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424189692/primary_doc.xml"
     },
     "edgar/nport/iwf/2024-09-30_0001752724-24-268863.xml": {
+      "form": "NPORT-P",
       "sha256": "13b27b3a7e0f2b58f10415ccbe0db7ab9b3d289e9b9ffb1163e7ee55feb0dbc6",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272424268863/primary_doc.xml"
     },
     "edgar/nport/iwf/2024-12-31_0001752724-25-034056.xml": {
+      "form": "NPORT-P",
       "sha256": "3fee08000f1de837f7811ea9af0ebff59354e2c5ba4ee3ec3c744271e6f73cea",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425034056/primary_doc.xml"
     },
     "edgar/nport/iwf/2025-03-31_0001752724-25-118601.xml": {
+      "form": "NPORT-P",
       "sha256": "3cf8dc8dafedf436bab8e0f1fe46a0c42da801c596e4e99b3781b295ecae3761",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425118601/primary_doc.xml"
     },
     "edgar/nport/iwf/2025-06-30_0001752724-25-204350.xml": {
+      "form": "NPORT-P",
       "sha256": "7221fd32eb2600a276c62224c494f81037c77fd5bf2b088f6f52eba0a2c3cf4a",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272425204350/primary_doc.xml"
     },
     "edgar/nport/iwf/2025-09-30_0001004726-25-002059.xml": {
+      "form": "NPORT-P",
       "sha256": "7fe35c56f45a39044315248f18a9f59f7f4e2338f62e597d3543ddc70ad7f744",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000100472625002059/primary_doc.xml"
     },
     "edgar/nport/iwf/2025-12-31_0001004726-26-000787.xml": {
+      "form": "NPORT-P",
       "sha256": "72166c72baee7b302eba7cbf6767624350e2de06d198c78fc0630fb246f8b1f7",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000100472626000787/primary_doc.xml"
     },
     "edgar/nport/iwf/2026-03-31_0001004726-26-003755.xml": {
+      "form": "NPORT-P",
       "sha256": "10cc0e4b980e8338508fa987c3155753a2d51ff19c42d0bbc7eaa441249a9a07",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000100472626003755/primary_doc.xml"
     },
     "edgar/nport/iwf/2026-06-30_0001004726-26-007047.xml": {
+      "form": "NPORT-P",
       "sha256": "c66e19366e1623ac3e479745b3790fdc204efb16f228a95f9a633a80cf90a6e8",
       "url": "https://www.sec.gov/Archives/edgar/data/1100663/000100472626007047/primary_doc.xml"
     }
