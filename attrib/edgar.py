@@ -24,7 +24,7 @@ ARCHIVES = "https://www.sec.gov/Archives/edgar/data"
 
 FILINGS_13F = ["entity", "cik", "accession", "form", "filing_date", "period_date", "amendment_type", "infotable_name"]
 HOLDINGS_RAW_13F = ["name", "title_class", "cusip", "value_raw", "value_usd", "shares", "ssh_type", "put_call"]
-HOLDINGS = ["entity", "period_date", "cusip", "name", "value_usd", "shares"]
+HOLDINGS = ["entity", "period_date", "cusip", "isin", "sec_id", "name", "value_usd", "shares"]
 FILINGS_NPORT = ["entity", "series_id", "accession", "filing_date", "period_date"]
 HOLDINGS_RAW_NPORT = [
     "entity", "accession", "period_date", "name", "title", "cusip", "isin", "balance", "units",
@@ -36,6 +36,7 @@ NPORT_FEED = (
 )
 
 _CUSIP_RE = re.compile(r"^[0-9A-Z]{9}$")
+_ISIN_RE = re.compile(r"^[A-Z]{2}[0-9A-Z]{9}[0-9]$")
 _PARSER = etree.XMLParser(huge_tree=True, resolve_entities=False)
 
 
@@ -124,6 +125,34 @@ class EdgarClient:
         return self._get(url).content
 
 
+# ---------------------------------------------------------------- security ids
+
+
+def valid_isin(isin: str) -> bool:
+    """ISO 6166: 2-letter country code, 9 alphanumeric characters, then a Luhn check digit."""
+    if not _ISIN_RE.match(isin):
+        return False
+    digits = "".join(str(int(c, 36)) for c in isin[:-1])
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch) * (2 if i % 2 == 0 else 1)
+        total += d // 10 + d % 10
+    return (10 - total % 10) % 10 == int(isin[-1])
+
+
+def _norm(col: pd.Series) -> pd.Series:
+    return col.fillna("").astype(str).str.strip().str.upper()
+
+
+def sec_ids(cusip: pd.Series, isin: pd.Series) -> pd.Series:
+    """instructions/01b, step 1.4b: the CUSIP when it is valid (Convention 4.3), else the ISIN
+    when it is valid, else blank."""
+    c, i = _norm(cusip), _norm(isin)
+    ok_c = c.str.match(_CUSIP_RE)
+    ok_i = i.map(valid_isin).astype(bool)
+    return c.where(ok_c, i.where(ok_i, ""))
+
+
 # ---------------------------------------------------------------- 13F
 
 
@@ -201,17 +230,29 @@ def equity_rows_13f(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_book(rows: pd.DataFrame, value: str, shares: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Convention 4.3: upper-case CUSIPs, drop any not 9 alphanumeric characters, sum by CUSIP.
+    """Convention 4.3 as amended by instructions/01b, step 1.4b: rows with no `sec_id` are
+    dropped, the rest are summed by `sec_id`.
 
-    Returns (cusip, name, value_usd, shares sorted by cusip; the dropped rows).
+    13F rows carry no ISIN, so their `sec_id` is the CUSIP. In the book, `cusip` is blank
+    where it is not a valid CUSIP. Returns (cusip, isin, sec_id, name, value_usd, shares
+    sorted by sec_id; the dropped rows).
     """
-    r = rows.assign(cusip=rows["cusip"].fillna("").astype(str).str.strip().str.upper())
-    ok = r["cusip"].str.match(_CUSIP_RE)
-    g = r[ok].groupby("cusip", sort=True)
+    isin = rows["isin"] if "isin" in rows else pd.Series("", index=rows.index)
+    r = rows.assign(cusip=_norm(rows["cusip"]), isin=_norm(isin))
+    r = r.assign(sec_id=sec_ids(r["cusip"], r["isin"]))
+    r = r.assign(cusip=r["cusip"].where(r["cusip"].str.match(_CUSIP_RE), ""))
+    ok = r["sec_id"] != ""
+    g = r[ok].groupby("sec_id", sort=True)
     book = pd.DataFrame(
-        {"name": g["name"].first(), "value_usd": g[value].sum(), "shares": g[shares].sum()}
+        {
+            "cusip": g["cusip"].first(),
+            "isin": g["isin"].first(),
+            "name": g["name"].first(),
+            "value_usd": g[value].sum(),
+            "shares": g[shares].sum(),
+        }
     ).reset_index()
-    return book, r[~ok]
+    return book[["cusip", "isin", "sec_id", "name", "value_usd", "shares"]], r[~ok]
 
 
 def select_13f_filings(filings: pd.DataFrame, period: str) -> tuple[pd.Series | None, list[pd.Series]]:
@@ -259,7 +300,8 @@ def units_check(book: pd.DataFrame) -> float:
 
 
 def list_nport_filings(client: EdgarClient, series_id: str) -> pd.DataFrame:
-    """FILINGS_NPORT for form NPORT-P from the series atom feed, paged with `&start=` in steps of 100.
+    """FILINGS_NPORT for forms NPORT-P and NPORT-P/A from the series atom feed, paged with
+    `&start=` in steps of 100.
 
     `entity` and `period_date` are blank; the caller fills them (period from `repPdDate`).
     """
@@ -271,7 +313,7 @@ def list_nport_filings(client: EdgarClient, series_id: str) -> pd.DataFrame:
         if not entries:
             break
         for e in entries:
-            if _text(e, "{*}content/{*}filing-type") != "NPORT-P":
+            if _text(e, "{*}content/{*}filing-type") not in ("NPORT-P", "NPORT-P/A"):
                 continue
             rows.append(["", series_id, _text(e, "{*}content/{*}accession-number"),
                          _text(e, "{*}content/{*}filing-date"), ""])
@@ -313,13 +355,16 @@ def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame]:
 
 
 def equity_rows_nport(raw: pd.DataFrame) -> pd.DataFrame:
-    """Convention 4.2: `assetCat` = EC and `units` = NS, then rows with a blank CUSIP dropped."""
+    """Convention 4.2: `assetCat` = EC and `units` = NS, then rows with no `sec_id` (no valid
+    CUSIP and no valid ISIN) dropped. Adds the `sec_id` column."""
     r = raw[(raw["asset_cat"] == "EC") & (raw["units"] == "NS")]
-    return r[r["cusip"].fillna("").astype(str).str.strip() != ""]
+    r = r.assign(sec_id=sec_ids(r["cusip"], r["isin"]))
+    return r[r["sec_id"] != ""]
 
 
 def select_nport_filing(filings: pd.DataFrame, period: str) -> pd.Series | None:
-    """Convention 4.4: the latest NPORT-P by filing date for the period."""
+    """Convention 4.4 as amended by instructions/01b, Section B: the latest filing by filing
+    date for the period, whether NPORT-P or NPORT-P/A."""
     f = filings[filings["period_date"] == period].sort_values(["filing_date", "accession"], kind="mergesort")
     return None if f.empty else f.iloc[-1]
 

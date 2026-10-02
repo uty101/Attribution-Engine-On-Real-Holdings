@@ -37,8 +37,8 @@ TABLES = ROOT / "outputs" / "tables"
 
 COVERAGE = [
     "entity", "period_date", "filing_date", "lag_days", "n_rows_raw", "n_rows_kept", "dropped_value_usd",
-    "total_value_usd", "median_implied_price", "amendments_used", "unmapped_weight", "unpriced_weight",
-    "other_nosic_weight",
+    "total_value_usd", "median_implied_price", "amendments_used", "isin_only_weight", "unmapped_weight",
+    "unpriced_weight", "other_nosic_weight",
 ]
 # instructions/01_section_1.md, D 1.6: kept pctVal of every N-PORT book must sum into [95, 101]
 NPORT_PCT_LO, NPORT_PCT_HI = 95.0, 101.0
@@ -56,6 +56,12 @@ def read_str_csv(path: Path) -> pd.DataFrame:
 
 def _lag(filing_date: str, period: str) -> int:
     return (date.fromisoformat(filing_date) - date.fromisoformat(period)).days
+
+
+def _isin_only_weight(book: pd.DataFrame) -> float:
+    """instructions/01b, step 1.4b: the weight of rows whose `sec_id` is an ISIN."""
+    isin = (book["isin"] != "") & (book["sec_id"] == book["isin"])
+    return float(book.loc[isin, "value_usd"].sum() / book["value_usd"].sum())
 
 
 def fund_books(eid: str, H: list[date], lo: float, hi: float, failures: list[str]):
@@ -94,6 +100,7 @@ def fund_books(eid: str, H: list[date], lo: float, hi: float, failures: list[str
                 "total_value_usd": total,
                 "median_implied_price": med,
                 "amendments_used": ";".join(r["accession"] for r in used if r["form"] == "13F-HR/A"),
+                "isin_only_weight": _isin_only_weight(b),
             }
         )
     return book, cov
@@ -135,6 +142,7 @@ def benchmark_books(eid: str, H: list[date], failures: list[str]):
                 "total_value_usd": total,
                 "median_implied_price": units_check(b),
                 "amendments_used": f["accession"],
+                "isin_only_weight": _isin_only_weight(b),
             }
         )
     return book, cov
