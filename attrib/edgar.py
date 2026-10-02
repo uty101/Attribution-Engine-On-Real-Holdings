@@ -30,6 +30,8 @@ HOLDINGS_RAW_NPORT = [
     "entity", "accession", "period_date", "name", "title", "cusip", "isin", "balance", "units",
     "val_usd", "pct_val", "asset_cat", "issuer_cat", "inv_country",
 ]
+MONTHLY_RETURNS_NPORT = ["class_id", "month", "rtn_pct"]
+NPORT_RETURNS = ["entity", "series_id", "class_id", "accession", "filing_date", "period_date", "month", "rtn_pct"]
 NPORT_FEED = (
     "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={series_id}"
     "&type=NPORT-P&dateb=&owner=include&count=100&output=atom"
@@ -322,13 +324,32 @@ def list_nport_filings(client: EdgarClient, series_id: str) -> pd.DataFrame:
     return df.sort_values(["filing_date", "accession"], kind="mergesort").reset_index(drop=True)
 
 
-def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame]:
-    """(header with seriesId and repPdDate, HOLDINGS_RAW_NPORT with entity and accession blank)."""
+def _month(period: str, back: int) -> str:
+    """`YYYY-MM` of the month `back` months before the month of `period` (YYYY-MM-DD)."""
+    return str(pd.Period(period[:7], freq="M") - back)
+
+
+def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """(header with seriesId and repPdDate, HOLDINGS_RAW_NPORT with entity and accession blank,
+    MONTHLY_RETURNS_NPORT).
+
+    The 3rd frame is Part B Item B.5 `monthlyTotReturns`, 1 row per class and month
+    (instructions/02b, step 2.1b): `rtn3` is the month of `repPdDate`, `rtn2` the month before,
+    `rtn1` the month before that, all in percent. Its `attrs["class_ids"]` is the header's list
+    of `classId` elements.
+    """
     root = etree.fromstring(xml, _PARSER)
     header = {
         "seriesId": next((el.text or "").strip() for el in root.iter("{*}seriesId")),
         "repPdDate": next((el.text or "").strip() for el in root.iter("{*}repPdDate")),
     }
+    rets = []
+    for el in root.iter("{*}monthlyTotReturn"):
+        for back, attr in ((2, "rtn1"), (1, "rtn2"), (0, "rtn3")):
+            v = (el.get(attr) or "").strip()
+            rets.append([el.get("classId", "").strip(), _month(header["repPdDate"], back), float(v) if v else None])
+    returns = pd.DataFrame(rets, columns=MONTHLY_RETURNS_NPORT).astype({"rtn_pct": "float64"})
+    returns.attrs["class_ids"] = [(el.text or "").strip() for el in root.iter("{*}classId")]
     rows = []
     for it in root.iter("{*}invstOrSec"):
         cusip = _text(it, "{*}cusip")
@@ -351,7 +372,15 @@ def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame]:
                 _text(it, "{*}invCountry"),
             ]
         )
-    return header, pd.DataFrame(rows, columns=HOLDINGS_RAW_NPORT)
+    return header, pd.DataFrame(rows, columns=HOLDINGS_RAW_NPORT), returns
+
+
+def latest_monthly_returns(rows: pd.DataFrame) -> pd.DataFrame:
+    """NPORT_RETURNS rows with 1 row per class and month: the latest filing by filing date wins
+    (instructions/02b, step 2.1b). Sorted by class_id, month."""
+    r = rows.sort_values(["class_id", "month", "filing_date", "accession"], kind="mergesort")
+    r = r.drop_duplicates(["class_id", "month"], keep="last")
+    return r.reset_index(drop=True)
 
 
 def equity_rows_nport(raw: pd.DataFrame) -> pd.DataFrame:

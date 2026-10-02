@@ -30,6 +30,8 @@ class Entity:
     nav_ticker: str | None = None
     benchmark: str | None = None
     etf_ticker: str | None = None
+    nav_source: str | None = None
+    etf_successor: str | None = None
 
 
 @dataclass(frozen=True)

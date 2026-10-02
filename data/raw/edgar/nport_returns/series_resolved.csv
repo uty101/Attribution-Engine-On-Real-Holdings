@@ -1,0 +1,4 @@
+entity,nav_ticker,cik,series_id,class_id,class_name,found_by,series_classes,etf_class_ids
+akre,AKRIX,811030,S000026760,C000080287,Institutional Class,company_tickers_mf.json,C000080286:AKREX;C000080287:AKRIX;C000159797:AKRSX,
+jensen,JENIX,887215,S000004905,C000013260,I Shares,company_tickers_mf.json,C000013259:JENSX;C000013260:JENIX;C000013261:JENRX;C000175790:JENYX,
+polen,POLIX,1388485,S000029264,C000089998,Institutional Class,company_tickers_mf.json,C000089997:POLRX;C000089998:POLIX,

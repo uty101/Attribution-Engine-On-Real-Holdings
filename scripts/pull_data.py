@@ -6,6 +6,7 @@
     python scripts/pull_data.py --stage sec
     python scripts/pull_data.py --stage french
     python scripts/pull_data.py --stage prices
+    python scripts/pull_data.py --stage navret
 
 Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
 `--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
@@ -46,10 +47,12 @@ from attrib.config import load_config  # noqa: E402
 from attrib.mapping import norm_ticker, security_map_from_dir  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
+    NPORT_RETURNS,
     EdgarClient,
     filing_base_url,
     find_infotable_name,
     holdings_dates,
+    latest_monthly_returns,
     list_13f_filings,
     list_nport_filings,
     parse_nport,
@@ -73,6 +76,15 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 OVERRIDES = ROOT / "data" / "manual" / "overrides.csv"
+CLASS_PAGE_URL = (
+    "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={class_id}&type=NPORT-P&dateb=&owner=include&count=1"
+)
+# instructions/02b_section_2_completion.md, step 2.1b: fund N-PORT filings by filing date
+NAVRET_FILED_FROM = "2019-11-01"
+NAVRET_FILED_TO = "2026-12-31"
+NAVRET_SERIES = [
+    "entity", "nav_ticker", "cik", "series_id", "class_id", "class_name", "found_by", "series_classes", "etf_class_ids",
+]
 
 # instructions/02_section_2.md, C 2.1
 OPENFIGI_MAPPING = [
@@ -367,6 +379,63 @@ def stage_prices(cfg) -> None:
                                          "n": s.notna().sum()})).to_string())
 
 
+def class_name(client: EdgarClient, class_id: str) -> str:
+    """The class name EDGAR shows on the class's company page ("Class/Contract: C... <name>")."""
+    html = client.get_bytes(CLASS_PAGE_URL.format(class_id=class_id)).decode("latin-1")
+    m = re.search(rf"Class/Contract:\s*(?:<[^>]+>\s*)*{class_id}\s*(?:<[^>]+>|&nbsp;|\s)*([^<&]+)", html)
+    return m.group(1).strip() if m else ""
+
+
+def stage_navret(cfg, client: EdgarClient) -> dict:
+    """Each fund's N-PORT B.5 monthly total returns (instructions/02b, step 2.1b).
+
+    Series and class come from the committed company_tickers_mf.json. Writes
+    data/raw/edgar/nport_returns/{fund}_monthly.csv and data/raw/edgar/nport_returns/series_resolved.csv,
+    and returns the url, sha256 and form of every N-PORT XML read, for the manifest.
+    """
+    mf = json.loads((RAW / "sec" / "company_tickers_mf.json").read_text(encoding="utf-8"))
+    rows_mf = [dict(zip(mf["fields"], r)) for r in mf["data"]]
+    resolved, uncommitted = [], {}
+    for eid, e in cfg.entities.items():
+        if e.type != "fund":
+            continue
+        hits = [r for r in rows_mf if r["symbol"] == e.nav_ticker]
+        if len(hits) != 1:
+            sys.exit(f"stop under rule 4: {e.nav_ticker} has {len(hits)} rows in company_tickers_mf.json; "
+                     "instructions/02b says to resolve it with EDGAR full-text search, which is not built")
+        h = hits[0]
+        series, cls = h["seriesId"], h["classId"]
+        series_classes = sorted((r["classId"], r["symbol"]) for r in rows_mf if r["seriesId"] == series)
+        etf = [c for c, s in series_classes if e.etf_successor and s == e.etf_successor]
+        resolved.append([eid, e.nav_ticker, h["cik"], series, cls, class_name(client, cls), "company_tickers_mf.json",
+                         ";".join(f"{c}:{s}" for c, s in series_classes), ";".join(etf)])
+
+        filings = list_nport_filings(client, series)
+        out = []
+        for _, f in filings.iterrows():
+            if not NAVRET_FILED_FROM <= f["filing_date"] <= NAVRET_FILED_TO:
+                continue
+            url = f"{filing_base_url(h['cik'], f['accession'])}/primary_doc.xml"
+            b = client.get_bytes(url)
+            header, _, rets = parse_nport(b)
+            if header["seriesId"] != series:
+                sys.exit(f"stop under rule 4: {url} has seriesId {header['seriesId']}, expected {series}")
+            uncommitted[f"edgar/nport_returns/{eid}/{header['repPdDate']}_{f['accession']}.xml"] = {
+                "url": url, "sha256": sha256(b), "form": submission_type(b),
+            }
+            out.append(rets.assign(entity=eid, series_id=series, accession=f["accession"],
+                                   filing_date=f["filing_date"], period_date=header["repPdDate"]))
+        monthly = latest_monthly_returns(pd.concat(out, ignore_index=True))[NPORT_RETURNS]
+        write_csv(monthly, RAW / "edgar" / "nport_returns" / f"{eid}_monthly.csv")
+        own = monthly[monthly["class_id"] == cls]
+        print(f"{eid}: {len(out)} N-PORT filings, {len(monthly)} class-months, {cls}: {own['month'].min()} to "
+              f"{own['month'].max()} ({own['rtn_pct'].notna().sum()} months)", flush=True)
+    res = pd.DataFrame(resolved, columns=NAVRET_SERIES)
+    write_csv(res, RAW / "edgar" / "nport_returns" / "series_resolved.csv")
+    print(res.to_string())
+    return uncommitted
+
+
 def resolve_series(mf: dict, ticker: str) -> dict:
     """The 1 row of company_tickers_mf.json for `ticker` (fields cik, seriesId, classId, symbol)."""
     hits = [dict(zip(mf["fields"], r)) for r in mf["data"] if r[mf["fields"].index("symbol")] == ticker]
@@ -404,7 +473,7 @@ def stage_fixtures(cfg, client: EdgarClient) -> None:
     for _, f in nport[nport["filing_date"] > IVV_PERIOD].iterrows():
         url = f"{filing_base_url(ivv['cik'], f['accession'])}/primary_doc.xml"
         b = client.get_bytes(url)
-        header, _ = parse_nport(b)
+        header, _, _ = parse_nport(b)
         if header["repPdDate"] == IVV_PERIOD:
             rel = f"nport/ivv_{IVV_PERIOD}_{f['accession']}.xml"
             write_bytes(FIXTURES / rel, b)
@@ -469,7 +538,7 @@ def stage_edgar(cfg, client: EdgarClient) -> dict:
                 continue
             url = f"{filing_base_url(sr['cik'], f['accession'])}/primary_doc.xml"
             b = client.get_bytes(url)
-            header, raw = parse_nport(b)
+            header, raw, _ = parse_nport(b)
             if header["seriesId"] != sr["series_id"]:
                 sys.exit(f"stop under rule 4: {url} has seriesId {header['seriesId']}, expected {sr['series_id']}")
             filings.loc[i, "period_date"] = header["repPdDate"]
@@ -512,7 +581,7 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices"])
+    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret"])
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
     if args.stage == "figi":
@@ -535,6 +604,8 @@ def main() -> None:
     elif args.stage == "sec":
         stage_sec(cfg, client)
         update_manifest("sec")
+    elif args.stage == "navret":
+        update_manifest("navret", stage_navret(cfg, client))
 
 
 if __name__ == "__main__":

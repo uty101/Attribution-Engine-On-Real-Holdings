@@ -36,7 +36,7 @@ def _xml(period: str, rows: list[tuple]) -> bytes:
 
 
 def _raw(accession: str, xml: bytes) -> pd.DataFrame:
-    _, raw = parse_nport(xml)
+    _, raw, _ = parse_nport(xml)
     return raw.assign(entity="ivv", accession=accession)
 
 
@@ -63,7 +63,7 @@ def test_only_ec_ns_rows_kept():
 
 
 def test_header_series_and_period():
-    header, raw = parse_nport(FIX.read_bytes())
+    header, raw, _ = parse_nport(FIX.read_bytes())
     print(header)
     assert header == {"seriesId": "S000004310", "repPdDate": "2023-06-30"}
     assert (raw["period_date"] == "2023-06-30").all()
@@ -88,7 +88,7 @@ def test_latest_filing_wins_duplicate_period():
 
 
 def test_ivv_fixture_shape():
-    _, raw = parse_nport(FIX.read_bytes())
+    _, raw, _ = parse_nport(FIX.read_bytes())
     kept = equity_rows_nport(raw)
     n, pct = len(kept), kept["pct_val"].sum()
     print(f"kept rows {n}, kept pctVal sum {pct!r}")

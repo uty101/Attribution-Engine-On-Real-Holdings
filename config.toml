@@ -13,16 +13,20 @@ type = "fund"
 cik = 1112520
 nav_ticker = "AKRIX"
 benchmark = "ivv"
+nav_source = "nport"
+etf_successor = "AKRE"
 [entities.jensen]
 type = "fund"
 cik = 1106129
 nav_ticker = "JENIX"
 benchmark = "ivv"
+nav_source = "yfinance"
 [entities.polen]
 type = "fund"
 cik = 1034524
 nav_ticker = "POLIX"
 benchmark = "iwf"
+nav_source = "yfinance"
 [entities.ivv]
 type = "benchmark"
 etf_ticker = "IVV"
