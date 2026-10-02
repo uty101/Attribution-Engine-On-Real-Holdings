@@ -1,0 +1,76 @@
+[run]
+bootstrap_seed = 20261002
+
+[sample]
+first_holdings_date = "2019-03-31"
+last_holdings_date = "2026-06-30"
+last_return_date = "2026-09-30"
+price_start = "2015-12-01"
+price_end_exclusive = "2026-10-01"
+
+[entities.akre]
+type = "fund"
+cik = 1112520
+nav_ticker = "AKRIX"
+benchmark = "ivv"
+[entities.jensen]
+type = "fund"
+cik = 1106129
+nav_ticker = "JENIX"
+benchmark = "ivv"
+[entities.polen]
+type = "fund"
+cik = 1034524
+nav_ticker = "POLIX"
+benchmark = "iwf"
+[entities.ivv]
+type = "benchmark"
+etf_ticker = "IVV"
+[entities.iwf]
+type = "benchmark"
+etf_ticker = "IWF"
+
+[edgar]
+min_interval_s = 0.2
+retries = 3
+backoff_s = [2, 4, 8]
+units_switch_date = "2023-01-03"
+implied_price_lo = 1.0
+implied_price_hi = 5000.0
+
+[openfigi]
+batch_no_key = 10
+batch_with_key = 100
+min_interval_no_key_s = 2.4
+min_interval_with_key_s = 0.24
+
+[gates]
+fund_nav_corr_min = 0.90
+benchmark_gap_max = 0.01
+
+[linking]
+zero_tol = 1e-12
+
+[factors]
+names = ["mkt", "smb", "hml", "rmw", "cma", "umd"]
+hac_maxlags = 3
+rolling_window = 36
+stock_beta_window = 36
+stock_beta_min_obs = 24
+
+[risk]
+cov_months = 36
+daily_to_monthly = 21
+months_per_year = 12
+max_cond = 1e6
+top_n_positions = 15
+
+[bootstrap]
+mean_block = 4
+reps = 10000
+lo = 0.05
+hi = 0.95
+
+[report]
+dpi = 150
+max_pages = 4
