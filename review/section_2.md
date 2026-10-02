@@ -2,23 +2,99 @@
 
 ## Section
 
-Section 2, Mapping, sectors, prices and factors. **Stopped under rule 4 at step 2.3.**
+Section 2, Mapping, sectors, prices and factors. **Stopped again under rule 4, at step 2.1b of `instructions/02b_section_2_completion.md`.**
 
-Instruction 02, Section D: "yfinance returns no data for IVV, IWF or any NAV ticker: stop under rule 4." The `--stage prices` run returned 0 rows for AKRIX, the Akre NAV ticker. Before that, the run had written the full stock price panel. Steps 2.1 and 2.2 are complete. Step 2.3 is committed with everything except `nav_adjclose.csv`. Steps 2.4 and 2.5 were not started.
+Session 2b replaced yfinance with the fund's own N-PORT B.5 monthly returns for Akre. 02b step 2.1b: "If the Akre series has more than 1 missing month from October 2019 to the last month any source reaches, stop under rule 4 and list the months." Akre's B.5 returns end at July 2025, and the series has no ETF class. AKRE on yfinance counts only from November 2025, the first month fully after 2025-10-27. **2025-08, 2025-09 and 2025-10 are missing: 3 months.** Step 2.1b is committed except `outputs/tables/nav_monthly.csv` and the Jensen and Polen cross-check, which need the 2.3b price pull. Steps 2.1c, 2.3b, 2.4 and 2.5 were not started. The options are in `decisions/OPEN.md`, OPEN-33.
 
-A second Section D condition is also met, and Section D says to report it rather than stop. OpenFIGI's `no_match` holds more than 5% of the value of 59 books. It is Open question 1, with the 10 largest offenders.
+Session 2 had stopped at step 2.3 because yfinance has no AKRIX data. That stop is resolved by 02b (OPEN-31, option c). Its evidence is kept below, under "Session 2".
 
 ## Steps completed
 
 - 2.1 `--stage figi` (OpenFIGI, `sec_id` keyed, `ID_CUSIP` or `ID_ISIN`) and `--stage sec` (`company_tickers.json`, `sic.csv`), `data/raw/openfigi/mapping.csv` — `0b64589`
 - 2.2 `attrib/mapping.py`, `tests/test_mapping.py` (6 tests), `--stage french` and its 3 files, `data/manual/overrides.csv` header, `run_all.py --section 2` writing `data/processed/security_map.csv` — `097028f`
 - 2.3 (stopped) `--stage prices`, `attrib/returns.py` (`load_prices`, `load_nav`), `attrib/factors.py` (`load_french`), `tests/test_data_loaders.py` (2 tests), `data/raw/prices/adjclose.parquet` and `missing.csv`; no `nav_adjclose.csv` — `c233354`
-- 2.4 not started
-- 2.5 not started
+- 2.1b (stopped) `parse_nport` returns the B.5 `monthlyTotReturns` as a 3rd frame, `latest_monthly_returns`, `nport_month_series`, `--stage navret`, config keys `nav_source` and `etf_successor`, `tests/test_nav_returns.py` (3 tests), `data/raw/edgar/nport_returns/` (4 files); no `nav_monthly.csv`, no cross-check — `b8cd7e2`
+- 2.1c, 2.3b, 2.4 and 2.5 not started
 
 ## Evidence
 
-### The stop: yfinance has no AKRIX data
+### Session 2b stop: Akre has no monthly return for 2025-08 to 2025-10
+
+Fund series resolution (`data/raw/edgar/nport_returns/series_resolved.csv`). All 3 NAV tickers are still in the committed `company_tickers_mf.json` (session 1 pull), so the EDGAR full-text search fallback was not needed and is not built. Class names were read from EDGAR's class page ("Class/Contract: C... <name>"):
+
+```
+   entity nav_ticker      cik   series_id    class_id           class_name                 found_by                                                       series_classes etf_class_ids
+0    akre      AKRIX   811030  S000026760  C000080287  Institutional Class  company_tickers_mf.json                   C000080286:AKREX;C000080287:AKRIX;C000159797:AKRSX
+1  jensen      JENIX   887215  S000004905  C000013260             I Shares  company_tickers_mf.json  C000013259:JENSX;C000013260:JENIX;C000013261:JENRX;C000175790:JENYX
+2   polen      POLIX  1388485  S000029264  C000089998  Institutional Class  company_tickers_mf.json                                    C000089997:POLRX;C000089998:POLIX
+```
+
+AKRE is not a class of `S000026760`; `company_tickers_mf.json` lists it as `S000089351`, class `C000255872`. So `etf_class_ids` is empty, and source 2 of the month rule gives nothing for Akre.
+
+`--stage navret` output (filings filed 2019-11-01 to 2026-12-31; the B.5 months of each NAV class):
+
+```
+akre: 25 N-PORT filings, 216 class-months, C000080287: 2019-08 to 2025-07 (72 months)
+jensen: 26 N-PORT filings, 312 class-months, C000013260: 2019-09 to 2026-05 (78 months)
+polen: 28 N-PORT filings, 168 class-months, C000089998: 2019-08 to 2026-07 (84 months)
+```
+
+The months October 2019 to September 2026 that each NAV class lacks in B.5:
+
+```
+akre C000080287 B.5 months in Oct2019-Sep2026: 70 not in B.5: 2025-08;2025-09;2025-10;2025-11;2025-12;2026-01;2026-02;2026-03;2026-04;2026-05;2026-06;2026-07;2026-08;2026-09
+jensen C000013260 B.5 months in Oct2019-Sep2026: 77 not in B.5: 2024-12;2025-01;2025-02;2026-06;2026-07;2026-08;2026-09
+polen C000089998 B.5 months in Oct2019-Sep2026: 82 not in B.5: 2026-08;2026-09
+```
+
+The last 6 AKRIX rows of `akre_monthly.csv`:
+
+```
+    entity   series_id    class_id             accession filing_date period_date    month               rtn_pct
+138   akre  S000026760  C000080287  0001145549-25-045210  2025-06-30  2025-04-30  2025-02  0.029999999999999999
+139   akre  S000026760  C000080287  0001145549-25-045210  2025-06-30  2025-04-30  2025-03   -4.5199999999999996
+140   akre  S000026760  C000080287  0001145549-25-045210  2025-06-30  2025-04-30  2025-04    1.8100000000000001
+141   akre  S000026760  C000080287  0000894189-25-009200  2025-09-26  2025-07-31  2025-05    3.1600000000000001
+142   akre  S000026760  C000080287  0000894189-25-009200  2025-09-26  2025-07-31  2025-06    1.3600000000000001
+143   akre  S000026760  C000080287  0000894189-25-009200  2025-09-26  2025-07-31  2025-07                  2.71
+```
+
+The 10 latest filings of any form on series `S000026760` (EDGAR atom feed, one-off shell request). Nothing after the 2025-09-26 NPORT-P is an N-PORT:
+
+```
+N-CEN  2025-10-10  0000894189-25-010940
+24F-2NT  2025-10-08  0000894189-25-010843
+N-CSR  2025-10-06  0001133228-25-010512
+NPORT-P  2025-09-26  0000894189-25-009200
+N-PX  2025-08-28  0001438934-25-002111
+NPORT-P  2025-06-30  0001145549-25-045210
+497  2025-06-04  0000894189-25-004319
+497K  2025-06-04  0000894189-25-004327
+N-CSRS  2025-04-04  0001133228-25-003473
+NPORT-P  2025-03-31  0001145549-25-023186
+```
+
+Akre by source, October 2019 to September 2026, as the month rule would assign it. Sources 1 and 4 are certain from the data above. Source 3 counts the months that AKRE's yfinance series covers, measured in session 2 (233 rows, 2025-10-27 to 2026-09-30); it was not pulled into the repo, because 2.3b comes after the stop.
+
+```
+source            months
+nport_class           70   2019-10 to 2025-07
+nport_etf_class        0
+yfinance_etf          11   2025-11 to 2026-09 (not yet pulled)
+missing                3   2025-08, 2025-09, 2025-10
+```
+
+October 2025 counts as missing because its first day is not after 2025-10-27.
+
+Manifest after `--stage navret`: 79 N-PORT XML hashes under `edgar/nport_returns/`, and these row counts:
+
+```
+{'edgar/nport_returns/akre_monthly.csv': 216, 'edgar/nport_returns/jensen_monthly.csv': 312, 'edgar/nport_returns/polen_monthly.csv': 168, 'edgar/nport_returns/series_resolved.csv': 3}
+```
+
+Jensen's B.5 has a 3-month gap, 2024-12 to 2025-02, inside its span. It does not affect Jensen's NAV series, which comes from yfinance, but it will shorten the cross-check.
+
+### Session 2 stop: yfinance has no AKRIX data
 
 The tail of `python scripts/pull_data.py --stage prices`. The stock panel was written first, then the NAV call stopped:
 
@@ -336,29 +412,45 @@ The `prices` manifest entry was written after the stage stopped, by calling `upd
 
 ## Tests run
 
-`pytest -p socket --disable-socket -q`:
+`pytest -p socket --disable-socket -q`, after step 2.1b:
 
 ```
-..................................                                       [100%]
+.....................................                                    [100%]
 ============================== warnings summary ===============================
 .venv\Lib\site-packages\_pytest\config\__init__.py:864
   C:\Utkarsh\10. Quant Projects\6) Attribution Engine On Real Holdings\repo-clone\.venv\Lib\site-packages\_pytest\config\__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; socket
     self.import_plugin(arg, consider_entry_points=True)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-34 passed, 1 warning in 4.31s
+37 passed, 1 warning in 5.04s
 ```
 
-26 earlier tests, plus 6 in `tests/test_mapping.py` and 2 in `tests/test_data_loaders.py`.
+That is 26 Section 1 tests, 6 in `tests/test_mapping.py`, 2 in `tests/test_data_loaders.py` and 3 in `tests/test_nav_returns.py`. `pytest -q -s tests/test_nav_returns.py` prints:
+
+```
+     class_id    month  rtn_pct
+0  C000000001  2024-12     1.50
+1  C000000001  2025-01    -2.25
+2  C000000001  2025-02     3.00
+3  C000000002  2024-12     0.10
+4  C000000002  2025-01     0.20
+5  C000000002  2025-02     0.30
+..     month   ret           source
+0  2025-08  0.01      nport_class
+1  2025-09  0.02  nport_etf_class
+2  2025-10   NaN          missing
+3  2025-11  0.03     yfinance_etf
+4  2025-12   NaN          missing
+```
 
 ## Fresh-clone check
 
-Per instruction 02, A answer 5: the 3 step commits were pushed first (`7225d13..c233354`), then GitHub was cloned into `C:\t\s2`. Install output is trimmed to its last lines:
+Per instruction 02, A answer 5, and 02b Section E: step 2.1b was pushed first, then GitHub was cloned into `C:\t\s2b`. The push printed `error: failed to push some refs`, but `git ls-remote origin refs/heads/main` then returned `b8cd7e2`, and the clone's head is `b8cd7e2`. Install output is trimmed to its last lines:
 
 ```
-$ git clone -q https://github.com/uty101/Attribution-Engine-On-Real-Holdings.git /c/t/s2
+$ git clone -q https://github.com/uty101/Attribution-Engine-On-Real-Holdings.git /c/t/s2b
 $ git log --oneline -1
-c233354 step 2.3: prices and French loaders (stopped: yfinance has no AKRIX data)
+b8cd7e2 step 2.1b: fund monthly NAV returns from N-PORT (stopped: Akre has no return for 2025-08 to 2025-10)
 $ uv venv --python 3.12
 Using CPython 3.12.13
 Creating virtual environment at: .venv
@@ -367,73 +459,79 @@ $ uv pip install -r requirements-lock.txt
  + wrapt==2.5.0
  + yfinance==1.7.0
 $ uv pip install -e . --no-deps
- + attrib==0.0.0 (from file:///C:/t/s2)
+ + attrib==0.0.0 (from file:///C:/t/s2b)
 $ .venv/Scripts/python.exe -m pytest -p socket --disable-socket -q
-..................................                                       [100%]
+.....................................                                    [100%]
 ============================== warnings summary ===============================
 .venv\Lib\site-packages\_pytest\config\__init__.py:864
-  C:\t\s2\.venv\Lib\site-packages\_pytest\config\__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; socket
+  C:\t\s2b\.venv\Lib\site-packages\_pytest\config\__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; socket
     self.import_plugin(arg, consider_entry_points=True)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-34 passed, 1 warning in 10.69s
+37 passed, 1 warning in 9.07s
 $ .venv/Scripts/python.exe scripts/run_all.py --section 2
 section 1: all checks passed
 section 2: all checks passed
 exit 0
-953ff419314dad70bb3675e855d1c4f7fdf592a861c4c05d431d79d01d79008a *outputs/tables/coverage.csv
 10b349a491e8c88347e37519156787147a1085fb1d4bba83f96f10f064bbe399 *data/processed/security_map.csv
-10b349a491e8c88347e37519156787147a1085fb1d4bba83f96f10f064bbe399 */c/Utkarsh/10. Quant Projects/6) Attribution Engine On Real Holdings/repo-clone/data/processed/security_map.csv
+953ff419314dad70bb3675e855d1c4f7fdf592a861c4c05d431d79d01d79008a *outputs/tables/coverage.csv
+$ git status --short
 ```
 
-The clone's `security_map.csv` matches the local one byte for byte. `coverage.csv` keeps its Section 1 hash, since 2.5 did not run. `git status --short` in the clone printed nothing.
+`security_map.csv` has the same hash as in session 2, since 2.1c did not run. `git status --short` printed nothing.
 
 ## Runtime per step
 
 - 2.1: `--stage figi`, 7 min 48 s, 0 retries. A first run had been stopped at 1410 of 1622 by the 30-minute limit on background tasks in this session, before anything was written. That run's progress lines came in far more slowly than the rerun's, and the cause was not found. `--stage sec`, 4 min 47 s.
 - 2.2: `--stage french`, a few seconds. `run_all.py --section 2`, about 5 s.
 - 2.3: `--stage prices`, 26 batches plus the NAV call that stopped, 3 min 46 s.
+- 2.1b: `--stage navret`, 27 s in the foreground (02b, Section B, long pulls). It was run twice; the second run added the class names.
 
 ## Deviations from PLAN.md
 
-- Precedence: instruction 02 replaces the PLAN 2.1 to 2.2 key (`cusip`) with `sec_id` and adds `id_type`, `figi`, the `cik` override kind, and `nocik_top.csv`.
-- 2.1: the OpenFIGI client is `OpenFigiClient` in `scripts/pull_data.py`, not in `attrib/`. It is the only caller (rule 8), and `EdgarClient` only sends GET. Each job carries `"exchCode": "US"`, as in PLAN 2.1, for both ID types. `result_rank` starts at 1.
+- Precedence: instruction 02 replaces the PLAN 2.1 to 2.2 key (`cusip`) with `sec_id` and adds `id_type`, `figi`, the `cik` override kind, and `nocik_top.csv`. Instruction 02b adds steps 2.1b, 2.1c and 2.3b.
+- 2.1: the OpenFIGI client is `OpenFigiClient` in `scripts/pull_data.py` (accepted in 02b). Each job carries `"exchCode": "US"` for both ID types (accepted for pass 1). `result_rank` starts at 1.
 - 2.1: `sic.csv` covers the CIKs of every OpenFIGI equity result's ticker, plus override `ticker` and `cik` values. Since every `sec_id` returned at most 1 result, this equals the set reached by the selection rule.
 - 2.1: `pull_data.py` imports `run_all.fund_books` and `run_all.benchmark_books`, so the OpenFIGI universe is rebuilt from `data/raw/` and not read from `data/processed/`.
-- 2.2: in SECURITY_MAP, `ff12` is blank for `no_match` rows (they are the Unmapped bucket) and `Other` for `no_cik` and `no_sic`. A ticker matching more than 1 CIK raises; none does. An override `cik` row applies only to a row that has a ticker.
-- 2.2: `--stage french` keeps each monthly block's lines as filed (header and `YYYYMM` rows, values with French's padding), with LF line endings. The first header cell is blank, as French has it. It sends its own User-Agent, not `SEC_USER_AGENT`, so the owner's email is not sent outside EDGAR.
-- 2.3: the price panel's index dtype is `datetime64[ms]`, as yfinance returns it.
-- 2.3: the `prices` manifest entry was written after the stop (see Evidence).
+- 2.2: `ff12` is blank for `no_match` rows and `Other` for `no_cik` and `no_sic` (accepted). A ticker matching more than 1 CIK raises; none does. An override `cik` row applies only to a row that has a ticker (accepted).
+- 2.2: French blocks are kept as filed, and the French pull sends its own User-Agent (accepted).
+- 2.3: the price panel's index dtype is `datetime64[ms]`, as yfinance returns it. The `prices` manifest entry was written after the session 2 stop.
+- 2.1b: the header's class list is `attrs["class_ids"]` on the 3rd frame of `parse_nport`, not a key of the header dict. 02b says the 1st output is unchanged, and `test_header_series_and_period` asserts the header dict exactly.
+- 2.1b: `{fund}_monthly.csv` keeps every class of the series, 1 row per class and month after `latest_monthly_returns` (latest filing date wins). `series_resolved.csv` in the same folder records the resolution, which 02b asks to print.
+- 2.1b: the class name is read from EDGAR's HTML class page (`browse-edgar?action=getcompany&CIK=<classId>`). Neither `company_tickers_mf.json` nor the N-PORT header carries class names.
+- 2.1b: the EDGAR full-text search fallback for a NAV ticker missing from `company_tickers_mf.json` is not built. The stage stops with a message if it is ever needed. AKRIX is still in the committed file, which was pulled in session 1.
+- 2.1b: the month rule is `nport_month_series` in `attrib/returns.py`, with sources labelled `nport_class`, `nport_etf_class`, `yfinance_etf` and `missing`. B.5 percent values are divided by 100.
+- 2.1b: an "ETF class in the same series" is a class of the fund's series whose symbol in `company_tickers_mf.json` is `etf_successor`. For Akre there is none.
 
 ## Not verified
 
-- That the Akre Focus Fund converted into the AKRE ETF. This rests only on yfinance's `quoteType` and `fundInceptionDate`. No prospectus or filing was read.
-- The 2 OpenFIGI and yfinance probes in Evidence were one-off shell commands, outside `pull_data.py`. Their outputs are pasted but not committed.
+- That the Akre Focus Fund converted into the AKRE ETF on or about 2025-10-27. This rests on yfinance's `quoteType` and `fundInceptionDate` and on the series' last filings (N-CSR, 24F-2NT, N-CEN in October 2025). No prospectus or reorganisation filing was read.
+- The OpenFIGI, yfinance and EDGAR feed probes in Evidence were one-off shell commands outside `pull_data.py`. Their outputs are pasted but not committed.
+- The 11 `yfinance_etf` months for Akre come from session 2's probe of AKRE, not from a committed pull.
+- The Jensen and Polen B.5 against yfinance cross-check (02b D item 2) was not run: it needs `nav_adjclose.csv` from step 2.3b.
 - No OpenFIGI ticker or SEC SIC was checked by hand against a third source.
-- Steps 2.4 and 2.5 did not run, so QUARTERS, the coverage mapping columns and the 4 review lists do not exist.
+- Steps 2.1c, 2.3b, 2.4 and 2.5 did not run, so the fallback passes, `nav_adjclose.csv`, `nav_monthly.csv`, QUARTERS, the coverage mapping columns and the review lists do not exist.
 
 ## Open questions
 
-1. **OpenFIGI `no_match` above 5% of book value (Section D, reported as instructed).** 59 of 140 books are above 5%: Akre 8, Jensen 14, Polen 27, IVV 8, IWF 2. The highest is Jensen 2021-06-30 at 11.67%. The 10 largest offenders are listed above. Accenture `G1151C101` (Jensen, Polen, IWF on all 28 dates) and Aon `G0403H108` stand out: OpenFIGI has nothing for these live CUSIPs. For Exxon `30231G102` it returns lines on other exchanges but none on `US`. `38259P508` is Google's pre-2015 CUSIP, filed by Jensen for 1 period. Two ways to fix this:
-   - (a) `ticker` overrides from the reviewer for the top offenders, the route instruction 03 already plans;
-   - (b) a second OpenFIGI pass for `no_match` IDs without `exchCode`, keeping the first result whose `exchCode` is `US`, `UN`, `UW` or another US venue the reviewer lists.
-2. **AKRIX has no yfinance data (the stop).** OPEN-31 in `decisions/OPEN.md`:
-   - (a) a non-yfinance NAV source for AKRIX, spliced onto AKRE after the conversion;
-   - (b) Akre reported as failed for having no NAV data.
-3. **`unpriced_weight` and `other_nosic_weight` can overlap** (step 2.5, not reached). This is OPEN-32. CMA and CTRA are both `no_cik` and have no prices.
-4. **Exchange-traded funds in the 13F books.** 29 of the 34 `no_cik` rows are ETFs (IVV, IWF, VOO, SGOV and others), mostly in Polen's book. SPY is the only `no_sic` row. Under Convention 4.6 they land in Other. They are reported here, not judged.
+1. **Akre is missing 2025-08, 2025-09 and 2025-10 (the stop).** This is OPEN-33 in `decisions/OPEN.md`:
+   - (a) fill the 3 months from named sources (for example, August backed out of the 2025-10-06 N-CSR fiscal-year return, then the fund's daily NAVs up to the conversion), entered as `nav_return` overrides with a source note;
+   - (b) accept the gap, leaving Akre's quarterly NAV return blank for t = 24 and t = 25, outside its gate correlation.
+2. **Jensen's B.5 gap, 2024-12 to 2025-02.** It does not affect Jensen's NAV series, which comes from yfinance, but it removes 3 months from the B.5 against yfinance cross-check.
+3. Session 2's questions are decided in 02b, Section B: `no_match` by the fallback passes (step 2.1c, not reached), AKRIX by option (c), and OPEN-32 by option (a). ETFs in the 13F books stay in Other.
 
 ## Files changed
 
 - Step 2.1: `scripts/pull_data.py`, `data/raw/openfigi/mapping.csv`, `data/raw/sec/company_tickers.json`, `data/raw/sec/sic.csv`, `data/raw/MANIFEST.json`
 - Step 2.2: `attrib/mapping.py`, `tests/test_mapping.py`, `scripts/pull_data.py`, `scripts/run_all.py`, `data/manual/overrides.csv`, `data/raw/french/` (3 files), `data/raw/MANIFEST.json`
 - Step 2.3: `scripts/pull_data.py`, `attrib/returns.py`, `attrib/factors.py`, `tests/test_data_loaders.py`, `data/raw/prices/adjclose.parquet`, `data/raw/prices/missing.csv`, `data/raw/MANIFEST.json`
-- Review: `review/section_2.md`, `decisions/OPEN.md`, `instructions/02_section_2.status.md`
+- Step 2.1b: `attrib/edgar.py`, `attrib/returns.py`, `attrib/config.py`, `config.toml`, `scripts/pull_data.py`, `tests/test_edgar_nport.py`, `tests/test_config.py`, `tests/test_nav_returns.py`, `data/raw/edgar/nport_returns/` (4 files), `data/raw/MANIFEST.json`
+- Review: `review/section_2.md`, `decisions/OPEN.md`, `instructions/02_section_2.status.md` (session 2), `instructions/02b_section_2_completion.status.md` (session 2b)
 
 ## Reviewer reads
 
-1. `instructions/02_section_2.status.md`
-2. This file: Section, then "The stop", then Open questions
-3. `decisions/OPEN.md` (OPEN-31, OPEN-32)
-4. `attrib/mapping.py` (`build_security_map`)
-5. `scripts/pull_data.py` (`stage_figi`, `stage_sec`, `stage_prices`)
+1. `instructions/02b_section_2_completion.status.md`
+2. This file: Section, then "Session 2b stop", then Open questions
+3. `decisions/OPEN.md` (OPEN-33)
+4. `attrib/returns.py` (`nport_month_series`) and `attrib/edgar.py` (`parse_nport`, `latest_monthly_returns`)
+5. `scripts/pull_data.py` (`stage_navret`)
