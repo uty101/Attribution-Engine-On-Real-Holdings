@@ -25,6 +25,15 @@ ARCHIVES = "https://www.sec.gov/Archives/edgar/data"
 FILINGS_13F = ["entity", "cik", "accession", "form", "filing_date", "period_date", "amendment_type", "infotable_name"]
 HOLDINGS_RAW_13F = ["name", "title_class", "cusip", "value_raw", "value_usd", "shares", "ssh_type", "put_call"]
 HOLDINGS = ["entity", "period_date", "cusip", "name", "value_usd", "shares"]
+FILINGS_NPORT = ["entity", "series_id", "accession", "filing_date", "period_date"]
+HOLDINGS_RAW_NPORT = [
+    "entity", "accession", "period_date", "name", "title", "cusip", "isin", "balance", "units",
+    "val_usd", "pct_val", "asset_cat", "issuer_cat", "inv_country",
+]
+NPORT_FEED = (
+    "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={series_id}"
+    "&type=NPORT-P&dateb=&owner=include&count=100&output=atom"
+)
 
 _CUSIP_RE = re.compile(r"^[0-9A-Z]{9}$")
 _PARSER = etree.XMLParser(huge_tree=True, resolve_entities=False)
@@ -237,3 +246,90 @@ def units_check(book: pd.DataFrame) -> float:
     """Median implied price value_usd / shares over rows with shares > 0."""
     b = book[book["shares"] > 0]
     return float((b["value_usd"] / b["shares"]).median())
+
+
+# ---------------------------------------------------------------- N-PORT
+
+
+def list_nport_filings(client: EdgarClient, series_id: str) -> pd.DataFrame:
+    """FILINGS_NPORT for form NPORT-P from the series atom feed, paged with `&start=` in steps of 100.
+
+    `entity` and `period_date` are blank; the caller fills them (period from `repPdDate`).
+    """
+    rows, start = [], 0
+    while True:
+        url = NPORT_FEED.format(series_id=series_id) + (f"&start={start}" if start else "")
+        root = etree.fromstring(client.get_bytes(url), _PARSER)
+        entries = list(root.iter("{*}entry"))
+        if not entries:
+            break
+        for e in entries:
+            if _text(e, "{*}content/{*}filing-type") != "NPORT-P":
+                continue
+            rows.append(["", series_id, _text(e, "{*}content/{*}accession-number"),
+                         _text(e, "{*}content/{*}filing-date"), ""])
+        start += len(entries)
+    df = pd.DataFrame(rows, columns=FILINGS_NPORT)
+    return df.sort_values(["filing_date", "accession"], kind="mergesort").reset_index(drop=True)
+
+
+def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame]:
+    """(header with seriesId and repPdDate, HOLDINGS_RAW_NPORT with entity and accession blank)."""
+    root = etree.fromstring(xml, _PARSER)
+    header = {
+        "seriesId": next((el.text or "").strip() for el in root.iter("{*}seriesId")),
+        "repPdDate": next((el.text or "").strip() for el in root.iter("{*}repPdDate")),
+    }
+    rows = []
+    for it in root.iter("{*}invstOrSec"):
+        cusip = _text(it, "{*}cusip")
+        if cusip == "000000000":
+            cusip = ""
+        isin = it.find("{*}identifiers/{*}isin")
+        rows.append(
+            [
+                "", "", header["repPdDate"],
+                _text(it, "{*}name"),
+                _text(it, "{*}title"),
+                cusip,
+                "" if isin is None else isin.get("value", "").strip(),
+                float(_text(it, "{*}balance")),
+                _text(it, "{*}units"),
+                float(_text(it, "{*}valUSD")),
+                float(_text(it, "{*}pctVal")),
+                _text(it, "{*}assetCat"),
+                _text(it, "{*}issuerCat"),
+                _text(it, "{*}invCountry"),
+            ]
+        )
+    return header, pd.DataFrame(rows, columns=HOLDINGS_RAW_NPORT)
+
+
+def equity_rows_nport(raw: pd.DataFrame) -> pd.DataFrame:
+    """Convention 4.2: `assetCat` = EC and `units` = NS, then rows with a blank CUSIP dropped."""
+    r = raw[(raw["asset_cat"] == "EC") & (raw["units"] == "NS")]
+    return r[r["cusip"].fillna("").astype(str).str.strip() != ""]
+
+
+def select_nport_filing(filings: pd.DataFrame, period: str) -> pd.Series | None:
+    """Convention 4.4: the latest NPORT-P by filing date for the period."""
+    f = filings[filings["period_date"] == period].sort_values(["filing_date", "accession"], kind="mergesort")
+    return None if f.empty else f.iloc[-1]
+
+
+def resolve_nport_books(filings: pd.DataFrame, raw: pd.DataFrame, dates: list[date]) -> pd.DataFrame:
+    """HOLDINGS for every date in `dates` that has an NPORT-P; periods outside `dates` are ignored."""
+    out = []
+    for d in dates:
+        period = str(d)
+        f = select_nport_filing(filings, period)
+        if f is None:
+            continue
+        rows = equity_rows_nport(raw[raw["accession"] == f["accession"]])
+        book, _ = aggregate_book(rows, "val_usd", "balance")
+        book.insert(0, "period_date", period)
+        book.insert(0, "entity", f["entity"])
+        out.append(book)
+    if not out:
+        return pd.DataFrame(columns=HOLDINGS)
+    return pd.concat(out, ignore_index=True)[HOLDINGS]

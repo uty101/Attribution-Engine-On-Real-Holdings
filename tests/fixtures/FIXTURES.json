@@ -6,5 +6,9 @@
   "13f/akre/2023-06-30_0001112520-23-000013.xml": {
     "sha256": "439c2e43ef797906c769c2fcbac7f298254d09d9a41aa4870211a5a0a9c5d305",
     "url": "https://www.sec.gov/Archives/edgar/data/1112520/000111252023000013/infotable.xml"
+  },
+  "nport/ivv_2023-06-30_0001752724-23-191503.xml": {
+    "sha256": "880c14e3a7f46ae08e7953d41d5809178bd9bcae13c5461f9bb71a0f944543eb",
+    "url": "https://www.sec.gov/Archives/edgar/data/1100663/000175272423191503/primary_doc.xml"
   }
 }
