@@ -2,10 +2,14 @@
 
     python scripts/pull_data.py --stage fixtures
     python scripts/pull_data.py --stage edgar
+    python scripts/pull_data.py --stage figi
+    python scripts/pull_data.py --stage sec
 
-`--stage edgar` writes under data/raw/ and updates data/raw/MANIFEST.json.
+Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
+`--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
 
-Reads SEC_USER_AGENT from the environment; stops if it is unset (rule 15).
+Reads SEC_USER_AGENT from the environment; stops if it is unset (rule 15). Reads the
+optional OPENFIGI_API_KEY from the environment.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import json
 import os
 import platform
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +33,7 @@ from lxml import etree
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
@@ -54,6 +60,17 @@ AKRE_THOUSANDS_PERIOD = "2022-06-30"
 # instructions/01_section_1.md, D 1.4 and B OPEN-07: the IVV fixture period
 IVV_PERIOD = "2023-06-30"
 MF_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
+TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
+OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
+OVERRIDES = ROOT / "data" / "manual" / "overrides.csv"
+
+# instructions/02_section_2.md, C 2.1
+OPENFIGI_MAPPING = [
+    "sec_id", "id_type", "status", "result_rank", "figi", "composite_figi", "ticker", "name", "exch_code",
+    "market_sector", "security_type",
+]
+SIC_CSV = ["cik", "name", "sic", "sic_description"]
 
 
 def sha256(b: bytes) -> str:
@@ -92,6 +109,140 @@ def client_from_env(cfg) -> EdgarClient:
 def infotable_url(client: EdgarClient, cik: int, accession: str) -> str:
     base = filing_base_url(cik, accession)
     return f"{base}/{find_infotable_name(client.get_json(f'{base}/index.json'))}"
+
+
+class OpenFigiClient:
+    """POST to the OpenFIGI mapping API under the EDGAR failure rules (instructions/02, B).
+
+    Timeout `edgar.timeout_s`; retries and backoff from `[edgar]` on HTTP 429, 5xx, timeouts and
+    connection errors; any other non-200 stops at once. At least `min_interval` between requests,
+    counted when a request is sent. `X-OPENFIGI-APIKEY` only when a key is given.
+    """
+
+    def __init__(self, api_key: str, min_interval: float, retries: int, backoff, timeout: float) -> None:
+        self.headers = {"Content-Type": "application/json"}
+        if api_key:
+            self.headers["X-OPENFIGI-APIKEY"] = api_key
+        self.min_interval, self.retries, self.backoff, self.timeout = min_interval, retries, list(backoff), timeout
+        self.session = requests.Session()
+        self._last_sent: float | None = None
+        self.n_retries = 0
+
+    def _send(self, jobs: list[dict]):
+        if self._last_sent is not None:
+            wait = self.min_interval - (time.monotonic() - self._last_sent)
+            if wait > 0:
+                time.sleep(wait)
+        self._last_sent = time.monotonic()
+        return self.session.post(OPENFIGI_URL, json=jobs, headers=self.headers, timeout=self.timeout)
+
+    def map(self, jobs: list[dict]) -> list[dict]:
+        for attempt in range(self.retries + 1):
+            try:
+                resp = self._send(jobs)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                failure = f"{type(exc).__name__} ({exc})"
+            else:
+                if resp.status_code == 200:
+                    out = resp.json()
+                    if len(out) != len(jobs):
+                        sys.exit(f"stop under rule 4: OpenFIGI returned {len(out)} results for {len(jobs)} jobs")
+                    return out
+                if resp.status_code != 429 and not 500 <= resp.status_code <= 599:
+                    sys.exit(f"stop under rule 4: OpenFIGI HTTP {resp.status_code}: {resp.text[:500]}")
+                failure = f"HTTP {resp.status_code}"
+            if attempt == self.retries:
+                sys.exit(f"stop under rule 4: OpenFIGI {failure} after {self.retries} retries")
+            self.n_retries += 1
+            print(f"  OpenFIGI {failure}, retry {attempt + 1} after {self.backoff[attempt]} s", flush=True)
+            time.sleep(self.backoff[attempt])
+        raise AssertionError("unreachable")
+
+
+def book_sec_ids(cfg) -> list[str]:
+    """Every distinct `sec_id` in any of the books in H, rebuilt from data/raw/ (instructions/02, B)."""
+    H = holdings_dates(cfg)
+    failures: list[str] = []
+    ids: set[str] = set()
+    for eid, e in cfg.entities.items():
+        if e.type == "fund":
+            book, _ = run_all.fund_books(eid, H, cfg.edgar.implied_price_lo, cfg.edgar.implied_price_hi, failures)
+        else:
+            book, _ = run_all.benchmark_books(eid, H, failures)
+        ids |= set(book["sec_id"])
+    if failures:
+        sys.exit("stop under rule 4: section 1 checks failed:\n" + "\n".join(failures))
+    return sorted(ids)
+
+
+def id_type(sec_id: str) -> str:
+    """`cusip` for a 9-character `sec_id`, `isin` for a 12-character one (CLAUDE.md amendment 8)."""
+    return {9: "cusip", 12: "isin"}[len(sec_id)]
+
+
+def stage_figi(cfg) -> None:
+    """data/raw/openfigi/mapping.csv: every OpenFIGI result for every `sec_id`, ranked (instructions/02, C 2.1)."""
+    key = os.environ.get("OPENFIGI_API_KEY", "").strip()
+    o, e = cfg.openfigi, cfg.edgar
+    batch, interval = (o.batch_with_key, o.min_interval_with_key_s) if key else (o.batch_no_key, o.min_interval_no_key_s)
+    client = OpenFigiClient(key, interval, e.retries, e.backoff_s, e.timeout_s)
+    ids = book_sec_ids(cfg)
+    print(f"{len(ids)} sec_ids, batches of {batch} every {interval} s ({'with' if key else 'no'} API key)")
+    rows = []
+    for i in range(0, len(ids), batch):
+        chunk = ids[i : i + batch]
+        jobs = [{"idType": f"ID_{id_type(s).upper()}", "idValue": s, "exchCode": "US"} for s in chunk]
+        for sid, res in zip(chunk, client.map(jobs)):
+            data = res.get("data") or []
+            status = "ok" if "data" in res else res.get("warning") or res.get("error") or ""
+            if not data:
+                rows.append([sid, id_type(sid), status, None, *[""] * 7])
+            for rank, d in enumerate(data, start=1):
+                rows.append([
+                    sid, id_type(sid), status, rank, d.get("figi") or "", d.get("compositeFIGI") or "",
+                    d.get("ticker") or "", d.get("name") or "", d.get("exchCode") or "",
+                    d.get("marketSector") or "", d.get("securityType") or "",
+                ])
+        if (i // batch) % 20 == 0:
+            print(f"  {i + len(chunk)} / {len(ids)}", flush=True)
+    df = pd.DataFrame(rows, columns=OPENFIGI_MAPPING).astype({"result_rank": "Int64"})
+    write_csv(df, RAW / "openfigi" / "mapping.csv")
+    print(df["status"].value_counts().to_string())
+    print(f"{client.n_retries} retries")
+
+
+def norm_ticker(t: str) -> str:
+    """Kickoff 5.2: `-` and `/` both normalised to `-` before the exact ticker match."""
+    return t.replace("/", "-")
+
+
+def stage_sec(cfg, client: EdgarClient) -> None:
+    """company_tickers.json as downloaded, and sic.csv for every CIK reachable by ticker -> CIK.
+
+    The tickers are every OpenFIGI equity result's ticker plus every override `ticker` value;
+    override `cik` values are added as CIKs.
+    """
+    b = client.get_bytes(TICKERS_URL)
+    write_bytes(RAW / "sec" / "company_tickers.json", b)
+    by_ticker: dict[str, set[int]] = {}
+    for r in json.loads(b).values():
+        by_ticker.setdefault(norm_ticker(r["ticker"]), set()).add(int(r["cik_str"]))
+
+    figi = pd.read_csv(RAW / "openfigi" / "mapping.csv", dtype=str, keep_default_na=False)
+    ov = pd.read_csv(OVERRIDES, dtype=str, keep_default_na=False)
+    tickers = set(figi.loc[figi["market_sector"] == "Equity", "ticker"]) | set(ov.loc[ov["kind"] == "ticker", "value"])
+    tickers.discard("")
+    ciks = {c for t in tickers for c in by_ticker.get(norm_ticker(t), ())}
+    ciks |= {int(v) for v in ov.loc[ov["kind"] == "cik", "value"]}
+    print(f"{len(tickers)} tickers, {len(ciks)} CIKs reachable")
+
+    rows = []
+    for n, cik in enumerate(sorted(ciks)):
+        sub = client.get_json(SUBMISSIONS_URL.format(cik=cik))
+        rows.append([cik, sub.get("name") or "", sub.get("sic") or "", sub.get("sicDescription") or ""])
+        if n % 250 == 0:
+            print(f"  {n + 1} / {len(ciks)}", flush=True)
+    write_csv(pd.DataFrame(rows, columns=SIC_CSV), RAW / "sec" / "sic.csv")
 
 
 def resolve_series(mf: dict, ticker: str) -> dict:
@@ -237,14 +388,21 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar"])
+    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec"])
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
+    if args.stage == "figi":
+        stage_figi(cfg)
+        update_manifest("figi")
+        return
     client = client_from_env(cfg)
     if args.stage == "fixtures":
         stage_fixtures(cfg, client)
     elif args.stage == "edgar":
         update_manifest("edgar", stage_edgar(cfg, client))
+    elif args.stage == "sec":
+        stage_sec(cfg, client)
+        update_manifest("sec")
 
 
 if __name__ == "__main__":

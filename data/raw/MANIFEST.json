@@ -7,7 +7,9 @@
     "requests": "2.34.2"
   },
   "pulled_at_utc": {
-    "edgar": "2026-10-02T18:11:25Z"
+    "edgar": "2026-10-02T18:11:25Z",
+    "figi": "2026-10-02T21:10:16Z",
+    "sec": "2026-10-02T21:15:13Z"
   },
   "row_counts": {
     "edgar/13f/filings_akre.csv": 125,
@@ -17,7 +19,9 @@
     "edgar/nport/filings_iwf.csv": 28,
     "edgar/nport/holdings_ivv.csv": 14710,
     "edgar/nport/holdings_iwf.csv": 12862,
-    "sec/series_resolved.csv": 2
+    "openfigi/mapping.csv": 1622,
+    "sec/series_resolved.csv": 2,
+    "sec/sic.csv": 1221
   },
   "sha256": {
     "edgar/13f/akre/2019-03-31_0001112520-19-000015.xml": "9c802ea6fef4d850c7c8c384618eb1954fb6d226d15ccebea1751df486f138c2",
@@ -123,8 +127,11 @@
     "edgar/nport/filings_iwf.csv": "d27212d049000ee3e1851fb737b6cbdf92d35108f522de68c23cfc868006e6f0",
     "edgar/nport/holdings_ivv.csv": "f6f5ca6423422e8326f9b6daed7f1d5d651f0f0f896dbe6ab61e9a121892f84b",
     "edgar/nport/holdings_iwf.csv": "6efecac85f70cb9ea13258d4bd003631f572a4a7f887561f9c03c0d3a88976e9",
+    "openfigi/mapping.csv": "1a35f73753950c0d6b1847a0ea13da14ea444dc8b446ef8c7c18cbfe18e630de",
+    "sec/company_tickers.json": "9058f1e002140b38df0001c64c6f0d98657e177359d2f2879ad92a30d1eee9ee",
     "sec/company_tickers_mf.json": "f17facb023662f07c36a4809b6a65e65cd336eb3afae8e160d2b665cbe536c38",
-    "sec/series_resolved.csv": "dce782156fc755c8edc0422e3dd432b8da622639e7da94bce013929c5cf4ea5e"
+    "sec/series_resolved.csv": "dce782156fc755c8edc0422e3dd432b8da622639e7da94bce013929c5cf4ea5e",
+    "sec/sic.csv": "89831db54463bc536029bec9c78daeb1b89d6ecb2a07e1e5dce3c63a7509374b"
   },
   "uncommitted_sha256": {
     "edgar/nport/ivv/2019-09-30_0001752724-19-177847.xml": {
