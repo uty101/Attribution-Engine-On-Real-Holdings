@@ -67,7 +67,7 @@ def _text(el, path: str) -> str:
 
 
 class EdgarClient:
-    """Rate-limited GET with retries on HTTP 429 and 5xx.
+    """Rate-limited GET with a timeout and retries on HTTP 429, 5xx, timeouts and connection errors.
 
     A request counts towards `min_interval` when it is sent, not when it returns.
     """
@@ -78,6 +78,7 @@ class EdgarClient:
         min_interval: float,
         retries: int,
         backoff: Sequence[float],
+        timeout: float,
         session=None,
     ) -> None:
         if len(backoff) != retries:
@@ -86,6 +87,7 @@ class EdgarClient:
         self.min_interval = min_interval
         self.retries = retries
         self.backoff = list(backoff)
+        self.timeout = timeout
         self.session = session if session is not None else requests.Session()
         self._last_sent: float | None = None
 
@@ -95,18 +97,23 @@ class EdgarClient:
             if wait > 0:
                 time.sleep(wait)
         self._last_sent = time.monotonic()
-        return self.session.get(url, headers={"User-Agent": self.user_agent})
+        return self.session.get(url, headers={"User-Agent": self.user_agent}, timeout=self.timeout)
 
     def _get(self, url: str):
         for attempt in range(self.retries + 1):
-            resp = self._send(url)
-            status = resp.status_code
-            if status == 200:
-                return resp
-            if status != 429 and not 500 <= status <= 599:
-                raise RuntimeError(f"HTTP {status} for {url}")
+            try:
+                resp = self._send(url)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                failure = f"{type(exc).__name__} ({exc})"
+            else:
+                status = resp.status_code
+                if status == 200:
+                    return resp
+                if status != 429 and not 500 <= status <= 599:
+                    raise RuntimeError(f"HTTP {status} for {url}")
+                failure = f"HTTP {status}"
             if attempt == self.retries:
-                raise RuntimeError(f"HTTP {status} for {url} after {self.retries} retries")
+                raise RuntimeError(f"{failure} for {url} after {self.retries} retries")
             time.sleep(self.backoff[attempt])
         raise AssertionError("unreachable")
 

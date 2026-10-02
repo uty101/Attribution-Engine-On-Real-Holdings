@@ -40,6 +40,7 @@ class Edgar:
     units_switch_date: date
     implied_price_lo: float
     implied_price_hi: float
+    timeout_s: float
 
 
 @dataclass(frozen=True)

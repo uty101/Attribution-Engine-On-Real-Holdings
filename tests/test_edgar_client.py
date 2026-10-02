@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 
 import pytest
+import requests
 
 import attrib.edgar as edgar
 from attrib.config import load_config
@@ -37,13 +38,20 @@ class FakeResponse:
 
 
 class FakeSession:
-    def __init__(self, statuses: list[int]):
+    """`statuses` holds HTTP status codes, or exceptions to raise in place of a response."""
+
+    def __init__(self, statuses: list):
         self.statuses = list(statuses)
         self.calls: list[tuple[str, dict]] = []
+        self.timeouts: list = []
 
-    def get(self, url, headers=None):
+    def get(self, url, headers=None, timeout=None):
         self.calls.append((url, dict(headers or {})))
-        return FakeResponse(self.statuses.pop(0))
+        self.timeouts.append(timeout)
+        nxt = self.statuses.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return FakeResponse(nxt)
 
 
 @pytest.fixture
@@ -55,7 +63,7 @@ def clock(monkeypatch):
 
 def _client(session):
     e = CFG.edgar
-    return EdgarClient(UA, e.min_interval_s, e.retries, e.backoff_s, session=session)
+    return EdgarClient(UA, e.min_interval_s, e.retries, e.backoff_s, e.timeout_s, session=session)
 
 
 def test_user_agent_header_sent(clock):
@@ -89,3 +97,18 @@ def test_three_failures_raise(clock):
     print("recorded sleeps:", clock.sleeps)
     assert clock.sleeps == [2, 4, 8]
     assert len(s.calls) == 4
+
+
+def test_timeout_passed_to_get(clock):
+    s = FakeSession([200])
+    _client(s).get_bytes("https://www.sec.gov/t")
+    print("recorded timeout:", s.timeouts)
+    assert s.timeouts == [30]
+
+
+def test_connection_error_then_200_retries(clock):
+    s = FakeSession([requests.ConnectionError("reset by peer"), 200])
+    assert _client(s).get_json("https://data.sec.gov/c.json") == {"ok": True}
+    print("recorded sleeps:", clock.sleeps)
+    assert clock.sleeps == [2]
+    assert len(s.calls) == 2

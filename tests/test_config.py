@@ -36,6 +36,7 @@ SPEC_KEYS = {
     "edgar.units_switch_date",
     "edgar.implied_price_lo",
     "edgar.implied_price_hi",
+    "edgar.timeout_s",
     "openfigi.batch_no_key",
     "openfigi.batch_with_key",
     "openfigi.min_interval_no_key_s",

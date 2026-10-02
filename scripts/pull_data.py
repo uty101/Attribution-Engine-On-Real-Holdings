@@ -79,7 +79,7 @@ def client_from_env(cfg) -> EdgarClient:
     if not ua:
         sys.exit("SEC_USER_AGENT is unset: stop under rule 4 (kickoff rule 15)")
     e = cfg.edgar
-    return EdgarClient(ua, e.min_interval_s, e.retries, e.backoff_s)
+    return EdgarClient(ua, e.min_interval_s, e.retries, e.backoff_s, e.timeout_s)
 
 
 def infotable_url(client: EdgarClient, cik: int, accession: str) -> str:
