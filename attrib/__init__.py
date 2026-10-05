@@ -236,10 +236,12 @@ def _run(cfg, data_dir: Path, fund: str, bench: str, books: dict[str, pd.DataFra
     # Section 6: active share and ex-ante TE at each holdings date, realised TE over every book month
     rk = cfg.risk
     rets = daily_returns(prices)
+    # issuer keys from SECURITY_MAP as text, as run_all reads security_map.csv: a blank CIK is ""
+    smap_str = smap.astype(str).replace({"<NA>": ""})
     rq, last_dec = [], None
     for t, h, qs in zip(cal["t"], cal["holdings_date"], cal["q_start"]):
         posP, posB = (pos[(pos["entity"] == e) & (pos["t"] == t)] for e in (fund, bench))
-        AS = active_share(issuer_weights(posP, smap), issuer_weights(posB, smap))
+        AS = active_share(issuer_weights(posP, smap_str), issuer_weights(posB, smap_str))
         wP, wB = risk_weights(posP, smap), risk_weights(posB, smap)
         union = sorted(set(wP.index) | set(wB.index))
         tb = ticker_buckets(smap, union)
