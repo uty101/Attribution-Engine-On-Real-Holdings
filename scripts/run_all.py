@@ -411,7 +411,8 @@ def section_3(cfg) -> list[str]:
     return failures
 
 
-BRINSON_QUARTERLY = ["fund", "t", "bucket", "wP", "wB", "rP", "rB", *EFFECTS]
+# instructions/05, A answer 3: `filled` after rB, true where Convention 4.11 supplied rP or rB
+BRINSON_QUARTERLY = ["fund", "t", "bucket", "wP", "wB", "rP", "rB", "filled", *EFFECTS]
 LINKED = ["fund", "method", "bucket", *EFFECTS, "total"]
 LINK_METHODS = {"carino": carino, "menchero": menchero}
 SERIES_ORDER = [*EFFECTS, "gap"]  # kickoff 6.2, bootstrap.csv
@@ -424,14 +425,17 @@ def fund_label(cfg, fund: str) -> tuple[str, str]:
 
 
 def chart_1(cfg, fund: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, cal: pd.DataFrame, path: Path) -> None:
-    """Chart 1 (instructions/04, Section B): for each k, quarters 1 to k linked with Carino; the
-    Total allocation and Total selection in percent against q_end of quarter k."""
+    """Chart 1 (instructions/04, Section B; instructions/05, step 5.0): for each k, quarters 1 to k
+    linked with Carino; the Total allocation and Total selection against q_end of quarter k, and
+    the cumulative excess D_k = R_P,k - R_B,k with both compounded over quarters 1 to k, all in
+    percentage points."""
     ks = sorted(rP.index)
     pts = []
     for k in ks:
         sub = [t for t in ks if t <= k]
         linked = carino(rP[sub], rB[sub], eff[eff["t"] <= k], cfg.linking.zero_tol)
-        pts.append([linked["allocation"].sum(), linked["selection"].sum()])
+        D = np.prod(1 + rP[sub].to_numpy()) - np.prod(1 + rB[sub].to_numpy())
+        pts.append([linked["allocation"].sum(), linked["selection"].sum(), D])
     pts = 100 * np.array(pts)
     x = pd.to_datetime(cal.set_index("t").loc[ks, "q_end"])
     name, bench = fund_label(cfg, fund)
@@ -439,7 +443,8 @@ def chart_1(cfg, fund: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, cal
     ax.axhline(0, color="0.5", linewidth=0.8)
     ax.plot(x, pts[:, 0], label="Allocation", color="#1f77b4", linewidth=1.8)
     ax.plot(x, pts[:, 1], label="Selection", color="#d62728", linewidth=1.8)
-    ax.set_ylabel("Cumulative linked effect (%)")
+    ax.plot(x, pts[:, 2], label="Total excess (D)", color="black", linestyle="--", linewidth=1.8)
+    ax.set_ylabel("Percentage points of cumulative return")
     ax.legend(loc="best", frameon=False)
     fig.suptitle(f"{name} vs {bench}: cumulative allocation and selection (Carino)")
     ax.set_title("Interaction is excluded from the chart and shown in Table 1.", fontsize=9)
@@ -487,6 +492,7 @@ def section_4(cfg) -> list[str]:
                 failures.append(f"{fund} t={t}: Brinson identity misses by {err!r}")
             bq.append(pd.DataFrame({"fund": fund, "t": t, "bucket": BUCKETS_ORDER, "wP": wP.to_numpy(),
                                     "wB": wB.to_numpy(), "rP": fP.to_numpy(), "rB": fB.to_numpy(),
+                                    "filled": ~((wP > 0) & (wB > 0)).to_numpy(),
                                     **{c: ef[c].to_numpy() for c in EFFECTS}}))
             eff.append(ef.reset_index().assign(t=t))
         eff = pd.concat(eff, ignore_index=True)[["t", "bucket", *EFFECTS]]
