@@ -31,3 +31,21 @@ def reconstruction_table(book_q: pd.DataFrame, nav: pd.DataFrame, cal: pd.DataFr
     for c in ("q_start", "q_end"):
         out[c] = pd.to_datetime(out[c]).dt.strftime("%Y-%m-%d")
     return out
+
+
+GATE = ["fund", "corr", "pass", "n_quarters", "mean_gap", "std_gap", "mean_abs_gap", "te_gap_ann"]
+
+
+def gate(table4: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """GATE per entity of `table4` (D-19 A with amendment 11): Pearson correlation of book_return
+    with nav_return over the quarters with a NAV return, pass if corr >= threshold (kickoff 5.4),
+    their count, and the gap's mean, standard deviation (ddof 1), mean absolute value and
+    annualised tracking error (std x 2, kickoff 5.4)."""
+    rows = []
+    for eid, g in table4.groupby("entity", sort=False):
+        g = g.dropna(subset=["nav_return"])
+        corr = float(np.corrcoef(g["book_return"], g["nav_return"])[0, 1])
+        std = float(g["gap"].std(ddof=1))
+        rows.append([eid, corr, corr >= threshold, len(g), float(g["gap"].mean()), std,
+                     float(g["gap"].abs().mean()), std * 2])  # kickoff 5.4: quarterly std x 2 = sqrt(4)
+    return pd.DataFrame(rows, columns=GATE)

@@ -31,7 +31,8 @@ from attrib.edgar import (  # noqa: E402
     units_check,
 )
 from attrib.mapping import security_map_from_dir  # noqa: E402
-from attrib.reconstruction import reconstruction_table  # noqa: E402
+from attrib.bootstrap import bootstrap_mean  # noqa: E402
+from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
 from attrib.returns import (  # noqa: E402
     BOOK_MONTHLY,
     BOOK_QUARTERLY,
@@ -371,17 +372,32 @@ def benchmark_check(cfg, table4: pd.DataFrame) -> tuple[list[str], pd.DataFrame]
     return failures, bench[bench["gap"].abs() > cfg.gates.benchmark_gap_max]
 
 
+BOOTSTRAP = ["fund", "series", "mean", "p05", "p95"]
+
+
 def section_3(cfg) -> list[str]:
-    """Book returns (step 3.2), then the benchmark check (step 3.3)."""
+    """Book returns (step 3.2), the benchmark check (step 3.3), then Table 4 for every entity, the
+    fund gate and the gap bootstrap (step 3.4; amendment 11)."""
     res = book_returns(cfg)
     book_q, cal = res["book_q"], res["cal"]
-    bench = book_q[book_q["entity"].isin([k for k, e in cfg.entities.items() if e.type == "benchmark"])]
-    table4 = reconstruction_table(bench, benchmark_nav_monthly(cfg), cal)
+    nav = pd.concat([read_str_csv(TABLES / "nav_monthly.csv").astype({"ret": float})[["entity", "month", "ret"]],
+                     benchmark_nav_monthly(cfg)], ignore_index=True)
+    table4 = reconstruction_table(book_q, nav, cal)
     failures, above = benchmark_check(cfg, table4)
     if not above.empty:
         print(f"benchmark quarters with |gap| > benchmark_gap_max ({cfg.gates.benchmark_gap_max}):")
         print(above.merge(book_q, on=["entity", "t", "book_return"]).to_string())
     write_csv(table4, TABLES / "reconstruction.csv")
+
+    funds = [k for k, e in cfg.entities.items() if e.type == "fund"]
+    fund4 = table4[table4["entity"].isin(funds)]
+    write_csv(gate(fund4, cfg.gates.fund_nav_corr_min), TABLES / "gate.csv")
+    b = cfg.bootstrap
+    boot = []
+    for eid in funds:  # kickoff 5.9; amendment 11: blank quarters left out
+        gaps = fund4.loc[fund4["entity"] == eid, "gap"].dropna().to_numpy()
+        boot.append([eid, "gap", *bootstrap_mean(gaps, b.mean_block, b.reps, cfg.run.bootstrap_seed, b.lo, b.hi)])
+    write_csv(pd.DataFrame(boot, columns=BOOTSTRAP), TABLES / "bootstrap.csv")
     return failures
 
 
