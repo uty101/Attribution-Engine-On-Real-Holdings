@@ -14,8 +14,8 @@
     "figi2": "2026-10-05T09:55:29Z",
     "french": "2026-10-02T21:15:47Z",
     "navret": "2026-10-05T10:05:37Z",
-    "prices": "2026-10-05T10:04:43Z",
-    "sec": "2026-10-05T10:00:41Z"
+    "prices": "2026-10-05T15:16:02Z",
+    "sec": "2026-10-05T15:15:17Z"
   },
   "row_counts": {
     "edgar/13f/filings_akre.csv": 125,
@@ -33,10 +33,11 @@
     "french/mom_monthly.csv": 1196,
     "openfigi/fallback.csv": 2519,
     "openfigi/mapping.csv": 1622,
-    "prices/missing.csv": 33,
+    "prices/missing.csv": 55,
     "prices/nav_adjclose.csv": 2723,
+    "sec/cik_override_check.csv": 29,
     "sec/series_resolved.csv": 2,
-    "sec/sic.csv": 1258
+    "sec/sic.csv": 1294
   },
   "sha256": {
     "edgar/13f/akre/2019-03-31_0001112520-19-000015.xml": "9c802ea6fef4d850c7c8c384618eb1954fb6d226d15ccebea1751df486f138c2",
@@ -151,13 +152,14 @@
     "french/mom_monthly.csv": "fd793e12da4b6f48d2b5e40de29c6763f4067a5d7871f65c6028ce7af6bf2f20",
     "openfigi/fallback.csv": "8967c932cb831158d25fafea8d648d2f7ebfc69ebfd449a45e25fa3f799e00ed",
     "openfigi/mapping.csv": "1a35f73753950c0d6b1847a0ea13da14ea444dc8b446ef8c7c18cbfe18e630de",
-    "prices/adjclose.parquet": "62b7cb1bf9b824d0a8ccc3a511595ba97e557766a41369bb02cc0d83afed3a91",
-    "prices/missing.csv": "326892f19a4d72678e1fa0d0c5917e88e24345b5160cde10cafd1667be00101f",
+    "prices/adjclose.parquet": "6b607f49c02f776ab8d49a023c4ca978d49434f223d7a581f3fffa8752400d66",
+    "prices/missing.csv": "8eefff32fde1ef5cdff02708c13be083406aff7fbd36d597362824da5d28a1f3",
     "prices/nav_adjclose.csv": "fb123dd819a9f865b0d7c4f34b0bde8e678a459abbecdbc5c417298a1c9fbc2c",
+    "sec/cik_override_check.csv": "397302d48d5a6ef645a8609810bc1b3405ee81f4e4e146b9d713c078513d5c41",
     "sec/company_tickers.json": "31a807ba3f3c0b3340008aba9c3b487734d5b2d8dd5751c2a1b3667696cfa315",
     "sec/company_tickers_mf.json": "f17facb023662f07c36a4809b6a65e65cd336eb3afae8e160d2b665cbe536c38",
     "sec/series_resolved.csv": "dce782156fc755c8edc0422e3dd432b8da622639e7da94bce013929c5cf4ea5e",
-    "sec/sic.csv": "f84f654abfc22140f97a823904512589dc5d2b1b7925720b7f7abcba2652ccf3"
+    "sec/sic.csv": "82685788d93d036a563f4b08c07269c4debc0f17a2ce49c9af84fc49da24ed0d"
   },
   "uncommitted_sha256": {
     "edgar/nport/ivv/2019-09-30_0001752724-19-177847.xml": {

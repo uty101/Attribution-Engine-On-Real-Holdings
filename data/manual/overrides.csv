@@ -1,1 +1,92 @@
 kind,sec_id,period_date,value,source_note
+ticker,38259P508,,GOOGL,Alphabet Class A filed under Google's pre-2015 CUSIP
+ticker,913017109,,RTX,United Technologies; became Raytheon Technologies (RTX) on 2020-04-03
+ticker,112585104,,BN,Brookfield Asset Management Inc; renamed Brookfield Corp (BN) 2022
+ticker,03662Q105,,ANSS,ANSYS
+cik,03662Q105,,1013462,ANSYS
+ticker,30231G102,,XOM,Exxon Mobil
+ticker,25401T108,,DBRG,DigitalBridge Group
+ticker,19626G108,,DBRG,Colony Capital; renamed DigitalBridge (DBRG) 2021
+cik,25401T108,,1679688,DigitalBridge
+cik,19626G108,,1679688,DigitalBridge
+ticker,IE00BZ12WP82,,LIN,Linde
+ticker,G5494J103,,LIN,Linde
+ticker,512807108,,LRCX,Lam Research
+ticker,H82027105,,SOPH,SOPHiA Genetics
+ticker,74165N105,,PRMW,Primo Water
+ticker,74167P108,,PRMW,Primo Water
+cik,74165N105,,884713,Primo Water
+cik,74167P108,,884713,Primo Water
+ticker,369604103,,GE,General Electric
+ticker,040413106,,ANET,Arista Networks
+ticker,09247X101,,BLK,BlackRock
+ticker,IE00BY9D5467,,AGN,Allergan
+cik,IE00BY9D5467,,1578845,Allergan
+ticker,N07059210,,ASML,ASML Holding
+ticker,GB00BZ09BD16,,TEAM,Atlassian
+ticker,G06242104,,TEAM,Atlassian
+ticker,755111507,,RTN,Raytheon
+cik,755111507,,1047122,Raytheon
+ticker,G5960L103,,MDT,Medtronic
+ticker,00507V109,,ATVI,Activision Blizzard
+cik,00507V109,,718877,Activision Blizzard
+ticker,90184L102,,TWTR,Twitter
+cik,90184L102,,1418091,Twitter
+ticker,983919101,,XLNX,Xilinx
+cik,983919101,,743988,Xilinx
+ticker,848637104,,SPLK,Splunk
+cik,848637104,,1353283,Splunk
+ticker,26614N102,,DD,DuPont de Nemours
+ticker,285512109,,EA,Electronic Arts
+cik,285512109,,712515,Electronic Arts
+ticker,G4388N106,,HELE,Helen of Troy
+ticker,Y4600W108,,KARO,Karooooo
+ticker,339041105,,CPAY,FleetCor Technologies; renamed Corpay (CPAY) 2024
+ticker,723787107,,PXD,Pioneer Natural Resources
+cik,723787107,,1038357,Pioneer Natural Resources
+ticker,928563402,,VMW,VMware
+cik,928563402,,1124610,VMware
+ticker,44919P508,,MTCH,Match Group
+ticker,054937107,,TFC,BB&T; renamed Truist Financial (TFC) 2019
+ticker,156782104,,CERN,Cerner
+cik,156782104,,804753,Cerner
+ticker,812578102,,SGEN,Seattle Genetics
+ticker,81181C104,,SGEN,Seagen
+cik,812578102,,1060736,Seagen
+cik,81181C104,,1060736,Seagen
+ticker,G46188101,,HZNP,Horizon Therapeutics
+ticker,IE00BQPVQZ61,,HZNP,Horizon Therapeutics
+cik,G46188101,,1492426,Horizon Therapeutics
+cik,IE00BQPVQZ61,,1492426,Horizon Therapeutics
+ticker,BMG475671050,,INFO,IHS Markit
+cik,BMG475671050,,1598014,IHS Markit
+ticker,CH0102993182,,TEL,TE Connectivity
+ticker,682680103,,OKE,ONEOK
+ticker,22266L106,,COUP,Coupa Software
+cik,22266L106,,1385867,Coupa Software
+ticker,867914103,,STI,SunTrust Banks
+cik,867914103,,750556,SunTrust Banks
+ticker,904767704,,UL,Unilever
+ticker,053484101,,AVB,AvalonBay Communities
+cik,053484101,,915912,AvalonBay Communities
+ticker,JE00B783TY65,,APTV,Aptiv
+ticker,86800U104,,SMCI,Super Micro Computer
+ticker,177376100,,CTXS,Citrix Systems
+cik,177376100,,877890,Citrix Systems
+ticker,254709108,,DFS,Discover Financial Services
+cik,254709108,,1393612,Discover Financial Services
+ticker,M22465104,,CHKP,Check Point Software
+ticker,78486Q101,,SIVB,SVB Financial Group
+cik,78486Q101,,719739,SVB Financial Group
+ticker,94946T106,,WCG,WellCare Health Plans
+cik,94946T106,,1279363,WellCare Health Plans
+ticker,G29018101,,DLO,dLocal
+ticker,M7S64H106,,MNDY,monday.com
+ticker,30063P105,,EXAS,Exact Sciences
+cik,30063P105,,1124140,Exact Sciences
+ticker,98936J101,,ZEN,Zendesk
+cik,98936J101,,1463172,Zendesk
+ticker,531229854,,FWONK,Liberty Media Formula One Series C
+ticker,531229870,,FWONA,Liberty Media Formula One Series A
+ticker,637071101,,NOV,National Oilwell Varco; renamed NOV Inc
+ticker,74838J101,,QDEL,Quidel; renamed QuidelOrtho

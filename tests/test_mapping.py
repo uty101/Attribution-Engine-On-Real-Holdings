@@ -94,7 +94,7 @@ def test_cik_override():
     before = build_security_map(figi, _fallback(), _overrides(), tickers, sic, FF12).iloc[0]
     assert (before["cik"] is pd.NA or pd.isna(before["cik"])) and before["map_status"] == "no_cik"
     assert before["ff12"] == "Other"
-    after = build_security_map(figi, _fallback(), _overrides([["cik", "987654321", "", "42", "reviewer"]]), tickers, sic, FF12
+    after = build_security_map(figi, _fallback(), _overrides([["cik", "987654321", "", "42", "Gone Co"]]), tickers, sic, FF12
     ).iloc[0]
     assert (after["cik"], after["sic"], after["ff12"]) == (42, 6021, "Money")
     assert (after["map_status"], after["source"]) == ("mapped", "openfigi;override_cik")
@@ -156,3 +156,37 @@ def test_name_check_rejects():
 def test_us_isin_from_cusip():
     assert us_isin("30231G102") == "US30231G1022"
     assert us_isin("037833100") == "US0378331005"
+
+def test_cik_override_beats_ticker_lookup():
+    # instructions/03, Section B: a reused ticker (STI) maps to the wrong CIK in today's
+    # company_tickers.json; the cik override wins over the ticker -> CIK match.
+    figi = _figi([["867914103", "cusip", "ok", "1", "F3", "", "STI", "SUNTRUST BANKS INC", "US", "Equity",
+                   "Common Stock"]])
+    tickers = _tickers([[999, "STI", "SOLIDION TECHNOLOGY INC"]])
+    sic = _sic([[999, "Solidion Technology Inc.", "3571", ""], [750556, "SUNTRUST BANKS INC", "6021", ""]])
+    before = build_security_map(figi, _fallback(), _overrides(), tickers, sic, FF12).iloc[0]
+    assert (before["cik"], before["ff12"], before["source"]) == (999, "BusEq", "openfigi")
+    ov = _overrides([["cik", "867914103", "", "750556", "SunTrust Banks"]])
+    after = build_security_map(figi, _fallback(), ov, tickers, sic, FF12).iloc[0]
+    print(pd.DataFrame([before, after]).to_string())
+    assert (after["cik"], after["sic"], after["ff12"]) == (750556, 6021, "Money")
+    assert (after["map_status"], after["source"]) == ("mapped", "openfigi;override_cik")
+
+
+def test_cik_override_name_mismatch_not_applied():
+    # instructions/03, Section B: the override's source_note names a different company from the
+    # CIK's submissions name, so the row is not applied and the ticker -> CIK match stands.
+    from attrib.mapping import cik_override_check
+
+    figi = _figi([["867914103", "cusip", "ok", "1", "F3", "", "STI", "SUNTRUST BANKS INC", "US", "Equity",
+                   "Common Stock"]])
+    tickers = _tickers([[999, "STI", "SOLIDION TECHNOLOGY INC"]])
+    sic = _sic([[999, "Solidion Technology Inc.", "3571", ""], [750556, "TRUIST FINANCIAL CORP", "6021", ""]])
+    ov = _overrides([["cik", "867914103", "", "750556", "SunTrust Banks"]])
+    chk = cik_override_check(ov, sic)
+    print(chk.to_string())
+    assert chk[["sec_id", "cik", "submissions_name", "note_name", "match"]].values.tolist() == [
+        ["867914103", 750556, "TRUIST FINANCIAL CORP", "SunTrust Banks", False]
+    ]
+    row = build_security_map(figi, _fallback(), ov, tickers, sic, FF12).iloc[0]
+    assert (row["cik"], row["ff12"], row["source"]) == (999, "BusEq", "openfigi")

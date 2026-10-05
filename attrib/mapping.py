@@ -152,6 +152,25 @@ def judge_results(
     return rows
 
 
+CIK_OVERRIDE_CHECK = ["sec_id", "cik", "submissions_name", "note_name", "match"]
+
+
+def cik_override_check(overrides: pd.DataFrame, sic: pd.DataFrame) -> pd.DataFrame:
+    """CIK_OVERRIDE_CHECK, 1 row per `cik` override (instructions/03, Section B): the first token of
+    the CIK's submissions `name` (the `name` column of sic.csv) against the first token of the row's
+    `source_note`, both normalised by the 02b rule (`name_check`). A CIK with no sic.csv row has no
+    submissions name and does not match."""
+    ov = overrides.fillna("").astype(str)
+    ov = ov[ov["kind"] == "cik"]
+    s = sic.fillna("").astype(str)
+    names = dict(zip(s["cik"].astype(int), s["name"]))
+    rows = []
+    for sid, cik, note in zip(ov["sec_id"], ov["value"], ov["source_note"]):
+        sub = names.get(int(cik), "")
+        rows.append([sid, int(cik), sub, note, sub != "" and name_check(sub, note) == ""])
+    return pd.DataFrame(rows, columns=CIK_OVERRIDE_CHECK)
+
+
 def _accepted_fallback(fallback: pd.DataFrame) -> pd.DataFrame:
     """Per sec_id, the accepted fallback result of the lowest pass."""
     fb = fallback.fillna("")
@@ -179,7 +198,9 @@ def build_security_map(
       accepted fallback result of pass 2, 3 or 4 (instructions/02b, step 2.1c).
     - source: `openfigi`, `figi_isin`, `figi_noexch` or `yahoo_isin` for the pass that gave the
       ticker (`openfigi` when none did), with `;override_ticker` and `;override_cik` appended.
-    - cik: exact match on the normalised ticker; an override `cik` row sets it when that match fails.
+    - cik: an override `cik` row whose name check passes (`cik_override_check`), whether or not
+      the ticker matches, else the exact match on the normalised ticker (instructions/03, Section B).
+      An override `cik` row that fails the name check is not applied.
     - map_status: `no_match` (no ticker), `no_cik`, `no_sic`, else `mapped` (D-12).
     - ff12: blank for `no_match` (the Unmapped bucket); Other for `no_cik` and `no_sic` (Convention 4.6).
     """
@@ -189,7 +210,8 @@ def build_security_map(
     fb = _accepted_fallback(fallback)
     ov = overrides.fillna("").astype(str)
     ov_ticker = dict(zip(ov.loc[ov["kind"] == "ticker", "sec_id"], ov.loc[ov["kind"] == "ticker", "value"]))
-    ov_cik = dict(zip(ov.loc[ov["kind"] == "cik", "sec_id"], ov.loc[ov["kind"] == "cik", "value"]))
+    chk = cik_override_check(ov, sic)
+    ov_cik = dict(zip(chk.loc[chk["match"], "sec_id"], chk.loc[chk["match"], "cik"]))
 
     t = tickers.astype({"cik": "int64"}).assign(key=tickers["ticker"].astype(str).map(norm_ticker))
     by_ticker = t.groupby("key")["cik"].agg(lambda s: sorted(set(s)))
@@ -214,14 +236,15 @@ def build_security_map(
         if not ticker:
             status = "no_match"
         else:
-            ciks = by_ticker.get(norm_ticker(ticker), [])
-            if len(ciks) > 1:
-                raise ValueError(f"ticker {ticker!r} matches {len(ciks)} CIKs in company_tickers.json: {ciks}")
-            if ciks:
-                cik = ciks[0]
-            elif sid in ov_cik:
+            if sid in ov_cik:
                 cik = int(ov_cik[sid])
                 source.append("override_cik")
+            else:
+                ciks = by_ticker.get(norm_ticker(ticker), [])
+                if len(ciks) > 1:
+                    raise ValueError(f"ticker {ticker!r} matches {len(ciks)} CIKs in company_tickers.json: {ciks}")
+                if ciks:
+                    cik = ciks[0]
             if cik is None:
                 status, ff = "no_cik", "Other"
             else:

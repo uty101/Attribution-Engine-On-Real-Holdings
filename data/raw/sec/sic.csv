@@ -199,6 +199,7 @@ cik,name,sic,sic_description
 200406,JOHNSON & JOHNSON,2834,Pharmaceutical Preparations
 202058,"L3HARRIS TECHNOLOGIES, INC. /DE/",3812,"Search, Detection, Navigation, Guidance, Aeronautical Sys"
 217346,TEXTRON INC,3720,Aircraft & Parts
+217410,UNILEVER PLC,2840,"Soap, Detergents, Cleang Preparations, Perfumes, Cosmetics"
 277135,"W.W. GRAINGER, INC.",5000,Wholesale-Durable Goods
 277948,CSX CORP,4011,"Railroads, Line-Haul Operating"
 310158,"Merck & Co., Inc.",2834,Pharmaceutical Preparations
@@ -231,11 +232,14 @@ cik,name,sic,sic_description
 707549,LAM RESEARCH CORP,3559,"Special Industry Machinery, NEC"
 711377,NEOGEN CORP,2835,In Vitro & In Vivo Diagnostic Substances
 711404,"COOPER COMPANIES, INC.",3851,Ophthalmic Goods
+712515,ELECTRONIC ARTS INC.,7372,Services-Prepackaged Software
 713676,"PNC FINANCIAL SERVICES GROUP, INC.",6021,National Commercial Banks
 715957,"DOMINION ENERGY, INC",4911,Electric Services
 716314,GRAHAM CORP,3560,General Industrial Machinery & Equipment
 717605,HEXCEL CORP /DE/,2821,"Plastic Materials, Synth Resins & Nonvulcan Elastomers"
+718877,"Activision Blizzard, Inc.",7372,Services-Prepackaged Software
 719413,HECLA MINING CO/DE/,1400,Mining & Quarrying of  Nonmetallic Minerals (No Fuels)
+719739,SVB FINANCIAL GROUP,6022,State Commercial Banks
 719955,WILLIAMS SONOMA INC,5700,"Retail-Home Furniture, Furnishings & Equipment Stores"
 720005,RAYMOND JAMES FINANCIAL INC,6211,"Security Brokers, Dealers & Flotation Companies"
 721371,CARDINAL HEALTH INC,5122,"Wholesale-Drugs, Proprietaries & Druggists' Sundries"
@@ -255,10 +259,12 @@ cik,name,sic,sic_description
 732717,AT&T INC.,4813,Telephone Communications (No Radiotelephone)
 737758,TORO CO,3524,Lawn & Garden Tractors & Home Lawn & Gardens Equip
 740260,"Ventas, Inc.",6798,Real Estate Investment Trusts
+743988,XILINX INC,3674,Semiconductors & Related Devices
 745732,"ROSS STORES, INC.",5651,Retail-Family Clothing Stores
 746515,EXPEDITORS INTERNATIONAL OF WASHINGTON INC,4731,Arrangement of  Transportation of  Freight & Cargo
 749251,GARTNER INC,8741,Services-Management Services
 750004,"Light & Wonder, Inc.",7373,Services-Computer Integrated Systems Design
+750556,SUNTRUST BANKS INC,6021,National Commercial Banks
 751978,VICOR CORP,3679,"Electronic Components, NEC"
 753308,NEXTERA ENERGY INC,4911,Electric Services
 759944,CITIZENS FINANCIAL GROUP INC/RI,6022,State Commercial Banks
@@ -294,6 +300,7 @@ cik,name,sic,sic_description
 798941,FIRST CITIZENS BANCSHARES INC /DE/,6022,State Commercial Banks
 802481,PILGRIMS PRIDE CORP,2015,Poultry Slaughtering and Processing
 804328,QUALCOMM INC/DE,3663,Radio & Tv Broadcasting & Communications Equipment
+804753,CERNER Corp,7373,Services-Computer Integrated Systems Design
 807863,MITEK SYSTEMS INC,3577,"Computer Peripheral Equipment, NEC"
 811156,CMS ENERGY CORP,4931,Electric & Other Services Combined
 812011,VAIL RESORTS INC,7990,Services-Miscellaneous Amusement & Recreation
@@ -352,6 +359,7 @@ cik,name,sic,sic_description
 875045,BIOGEN INC.,2836,"Biological Products, (No Diagnostic Substances)"
 875320,VERTEX PHARMACEUTICALS INC / MA,2834,Pharmaceutical Preparations
 877212,ZEBRA TECHNOLOGIES CORP,3560,General Industrial Machinery & Equipment
+877890,CITRIX SYSTEMS INC,7372,Services-Prepackaged Software
 878927,"OLD DOMINION FREIGHT LINE, INC.",4213,Trucking (No Local)
 879101,KIMCO REALTY CORP,6798,Real Estate Investment Trusts
 879169,INCYTE CORP,8731,Services-Commercial Physical & Biological Research
@@ -366,6 +374,7 @@ cik,name,sic,sic_description
 883984,ICU MEDICAL INC/DE,3841,Surgical & Medical Instruments & Apparatus
 884219,"Pursuit Attractions & Hospitality, Inc.",7990,Services-Miscellaneous Amusement & Recreation
 884394,SPDR S&P 500 ETF TRUST,,
+884713,Primo Water Corp /CN/,2086,Bottled & Canned Soft Drinks & Carbonated Waters
 884887,ROYAL CARIBBEAN CRUISES LTD,4400,Water Transportation
 885550,CREDIT ACCEPTANCE CORP,6141,Personal Credit Institutions
 885639,KOHLS Corp,5311,Retail-Department Stores
@@ -414,10 +423,12 @@ cik,name,sic,sic_description
 914208,Invesco Ltd.,6282,Investment Advice
 914475,NEUROCRINE BIOSCIENCES INC,2836,"Biological Products, (No Diagnostic Substances)"
 915389,EASTMAN CHEMICAL CO,2821,"Plastic Materials, Synth Resins & Nonvulcan Elastomers"
+915912,AVALONBAY COMMUNITIES INC,6798,Real Estate Investment Trusts
 915913,ALBEMARLE CORP,2821,"Plastic Materials, Synth Resins & Nonvulcan Elastomers"
 916076,MARTIN MARIETTA MATERIALS INC,1400,Mining & Quarrying of  Nonmetallic Minerals (No Fuels)
 916365,TRACTOR SUPPLY CO /DE/,5200,"Retail-Building Materials, Hardware, Garden Supply"
 916540,DARLING INGREDIENTS INC.,2070,Fats & Oils
+916789,HELEN OF TROY LTD,3634,Electric Housewares & Fans
 917273,RAMBUS INC,3674,Semiconductors & Related Devices
 918646,EAGLE MATERIALS INC,3241,"Cement, Hydraulic"
 920148,LABCORP HOLDINGS INC.,8071,Services-Medical Laboratories
@@ -447,6 +458,7 @@ cik,name,sic,sic_description
 936340,DTE ENERGY CO,4911,Electric Services
 936395,CIENA CORP,3661,Telephone & Telegraph Apparatus
 936468,LOCKHEED MARTIN CORP,3760,Guided Missiles & Space Vehicles & Parts
+937966,ASML HOLDING NV,3559,"Special Industry Machinery, NEC"
 939767,"EXELIXIS, INC.",2836,"Biological Products, (No Diagnostic Substances)"
 940944,DARDEN RESTAURANTS INC,5812,Retail-Eating  Places
 943452,WESTINGHOUSE AIR BRAKE TECHNOLOGIES CORP,3743,Railroad Equipment
@@ -470,10 +482,12 @@ cik,name,sic,sic_description
 1005284,UNIVERSAL DISPLAY CORP \PA\,3670,Electronic Components & Accessories
 1009001,CAMECO CORP,1090,Miscellaneous Metal Ores
 1013237,FACTSET RESEARCH SYSTEMS INC,7370,"Services-Computer Programming, Data Processing, Etc."
+1013462,ANSYS INC,7372,Services-Prepackaged Software
 1013857,PEGASYSTEMS INC,7374,Services-Computer Processing & Data Preparation
 1013871,"NRG ENERGY, INC.",4911,Electric Services
 1014473,VERISIGN INC/CA,7371,Services-Computer Programming Services
 1014739,"Option Care Health, Inc.",8082,Services-Home Health Care Services
+1015922,CHECK POINT SOFTWARE TECHNOLOGIES LTD,7372,Services-Prepackaged Software
 1018164,WILLIS LEASE FINANCE CORP,5080,"Wholesale-Machinery, Equipment & Supplies"
 1018724,AMAZON COM INC,5961,Retail-Catalog & Mail-Order Houses
 1018963,ATI INC,3317,Steel Pipe & Tubes
@@ -502,7 +516,9 @@ cik,name,sic,sic_description
 1037646,METTLER TOLEDO INTERNATIONAL INC/,3826,Laboratory Analytical Instruments
 1037868,AMETEK INC/,3823,"Industrial Instruments For Measurement, Display, and Control"
 1037976,JONES LANG LASALLE INC,6531,Real Estate Agents & Managers (For Others)
+1038357,PIONEER NATURAL RESOURCES CO,1311,Crude Petroleum & Natural Gas
 1039399,FORMFACTOR INC,3674,Semiconductors & Related Devices
+1039684,ONEOK INC /NEW/,4923,Natural Gas Transmisison & Distribution
 1040470,AEHR TEST SYSTEMS,3825,Instruments For Meas & Testing of  Electricity & Elec Signals
 1040971,SL GREEN REALTY CORP,6798,Real Estate Investment Trusts
 1041061,YUM BRANDS INC,5812,Retail-Eating  Places
@@ -512,6 +528,7 @@ cik,name,sic,sic_description
 1046102,RB GLOBAL INC.,7389,"Services-Business Services, NEC"
 1046179,TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD,3674,Semiconductors & Related Devices
 1046311,CHOICE HOTELS INTERNATIONAL INC /DE,7011,Hotels & Motels
+1047122,RAYTHEON CO/,3812,"Search, Detection, Navigation, Guidance, Aeronautical Sys"
 1047862,CONSOLIDATED EDISON INC,4931,Electric & Other Services Combined
 1048268,"IES Holdings, Inc.",1731,Electrical Work
 1048286,MARRIOTT INTERNATIONAL INC /MD/,7011,Hotels & Motels
@@ -534,6 +551,7 @@ cik,name,sic,sic_description
 1058290,COGNIZANT TECHNOLOGY SOLUTIONS CORP,7371,Services-Computer Programming Services
 1059556,MOODYS CORP /DE/,7320,"Services-Consumer Credit Reporting, Collection Agencies"
 1060391,"REPUBLIC SERVICES, INC.",4953,Refuse Systems
+1060736,Seagen Inc.,2836,"Biological Products, (No Diagnostic Substances)"
 1060822,CARTERS INC,2300,Apparel & Other Finishd Prods of  Fabrics & Similar Matl
 1060955,ICON PLC,8731,Services-Commercial Physical & Biological Research
 1061983,CYTOKINETICS INC,2834,Pharmaceutical Preparations
@@ -598,7 +616,9 @@ cik,name,sic,sic_description
 1120193,"NASDAQ, INC.",6200,"Security & Commodity Brokers, Dealers, Exchanges & Services"
 1121788,GARMIN LTD,3812,"Search, Detection, Navigation, Guidance, Aeronautical Sys"
 1123360,GLOBAL PAYMENTS INC,7389,"Services-Business Services, NEC"
+1124140,EXACT SCIENCES CORP,8071,Services-Medical Laboratories
 1124198,FLUOR CORP,1600,Heavy Construction Other Than Bldg Const - Contractors
+1124610,VMWARE LLC,7372,Services-Prepackaged Software
 1124796,"NLIGHT, INC.",3674,Semiconductors & Related Devices
 1126328,PRINCIPAL FINANCIAL GROUP INC,6321,Accident & Health Insurance
 1130310,CENTERPOINT ENERGY INC,4911,Electric Services
@@ -661,6 +681,7 @@ cik,name,sic,sic_description
 1267238,"ASSURANT, INC.",6399,"Insurance Carriers, NEC"
 1274494,"FIRST SOLAR, INC.",3674,Semiconductors & Related Devices
 1278021,MARKETAXESS HOLDINGS INC,6211,"Security Brokers, Dealers & Flotation Companies"
+1279363,"WELLCARE HEALTH PLANS, INC.",6324,Hospital & Medical Service Plans
 1280058,BLACKBAUD INC,7372,Services-Prepackaged Software
 1280452,"MONOLITHIC POWER SYSTEMS, INC.",3674,Semiconductors & Related Devices
 1281761,REGIONS FINANCIAL CORP,6021,National Commercial Banks
@@ -714,6 +735,7 @@ cik,name,sic,sic_description
 1345099,MESOBLAST LTD,2836,"Biological Products, (No Diagnostic Substances)"
 1350653,"Alphatec Holdings, Inc.",3841,Surgical & Medical Instruments & Apparatus
 1352010,"EPAM Systems, Inc.",7371,Services-Computer Programming Services
+1353283,SPLUNK INC,7372,Services-Prepackaged Software
 1355444,EMBRAER S.A.,3721,Aircraft
 1356090,"PRECIGEN, INC.",2834,Pharmaceutical Preparations
 1357615,"KBR, INC.",1600,Heavy Construction Other Than Bldg Const - Contractors
@@ -738,11 +760,13 @@ cik,name,sic,sic_description
 1383312,"BROADRIDGE FINANCIAL SOLUTIONS, INC.",7389,"Services-Business Services, NEC"
 1384905,"RingCentral, Inc.",7374,Services-Computer Processing & Data Preparation
 1385157,TE Connectivity plc,5065,"Wholesale-Electronic Parts & Equipment, NEC"
+1385867,Coupa Software Inc,7372,Services-Prepackaged Software
 1389170,Targa Resources Corp.,4922,Natural Gas Transmission
 1390777,Bank of New York Mellon Corp,6022,State Commercial Banks
 1393052,VEEVA SYSTEMS INC,7372,Services-Prepackaged Software
 1393311,Public Storage,6798,Real Estate Investment Trusts
 1393584,American Well Corp,7389,"Services-Business Services, NEC"
+1393612,Discover Financial Services,6141,Personal Credit Institutions
 1393818,Blackstone Inc.,6282,Investment Advice
 1395942,"OPENLANE, Inc.",5500,Retail-Auto Dealers & Gasoline Stations
 1396009,Vulcan Materials CO,1400,Mining & Quarrying of  Nonmetallic Minerals (No Fuels)
@@ -768,6 +792,7 @@ cik,name,sic,sic_description
 1413329,Philip Morris International Inc.,2111,Cigarettes
 1413447,NXP Semiconductors N.V.,3674,Semiconductors & Related Devices
 1415404,EchoStar CORP,4899,"Communications Services, NEC"
+1418091,"TWITTER, INC.",7370,"Services-Computer Programming, Data Processing, Etc."
 1418135,Keurig Dr Pepper Inc.,2080,Beverages
 1418819,Iridium Communications Inc.,4899,"Communications Services, NEC"
 1419612,"SOLAREDGE TECHNOLOGIES, INC.",3674,Semiconductors & Related Devices
@@ -798,6 +823,7 @@ cik,name,sic,sic_description
 1459200,"Alarm.com Holdings, Inc.",7372,Services-Prepackaged Software
 1462056,"Backblaze, Inc.",7372,Services-Prepackaged Software
 1463101,"Enphase Energy, Inc.",3674,Semiconductors & Related Devices
+1463172,"Zendesk, Inc.",7374,Services-Computer Processing & Data Preparation
 1466258,Trane Technologies plc,3822,Auto Controls For Regulating Residential & Comml Environments
 1467373,Accenture plc,7389,"Services-Business Services, NEC"
 1467623,"DROPBOX, INC.",7372,Services-Prepackaged Software
@@ -818,6 +844,7 @@ cik,name,sic,sic_description
 1486957,"BWX Technologies, Inc.",3510,Engines & Turbines
 1487952,"Vishay Precision Group, Inc.",3670,Electronic Components & Accessories
 1489393,LyondellBasell Industries N.V.,2860,Industrial Organic Chemicals
+1492426,Horizon Therapeutics Public Ltd Co,2834,Pharmaceutical Preparations
 1493594,"MACOM Technology Solutions Holdings, Inc.",3674,Semiconductors & Related Devices
 1494582,BOSTON OMAHA Corp,6510,Real Estate Operators (No Developers) & Lessors
 1499620,TAL Education Group,8200,Services-Educational Services
@@ -890,6 +917,7 @@ cik,name,sic,sic_description
 1576789,Wix.com Ltd.,7370,"Services-Computer Programming, Data Processing, Etc."
 1577526,"C3.ai, Inc.",7372,Services-Prepackaged Software
 1577552,Alibaba Group Holding Ltd,7389,"Services-Business Services, NEC"
+1578845,Allergan plc,2834,Pharmaceutical Preparations
 1579091,Maplebear Inc.,7389,"Services-Business Services, NEC"
 1579241,Allegion plc,7381,"Services-Detective, Guard & Armored Car Services"
 1579298,"Burlington Stores, Inc.",5311,Retail-Department Stores
@@ -914,6 +942,7 @@ cik,name,sic,sic_description
 1594805,SHOPIFY INC.,7372,Services-Prepackaged Software
 1596532,"Arista Networks, Inc.",3576,Computer Communications Equipment
 1597033,Sabre Corp,7370,"Services-Computer Programming, Data Processing, Etc."
+1598014,IHS Markit Ltd.,7370,"Services-Computer Programming, Data Processing, Etc."
 1599298,Summit Therapeutics Inc.,2834,Pharmaceutical Preparations
 1600033,"e.l.f. Beauty, Inc.",2844,"Perfumes, Cosmetics & Other Toilet Preparations"
 1601046,"Keysight Technologies, Inc.",3823,"Industrial Instruments For Measurement, Display, and Control"
@@ -1149,6 +1178,7 @@ cik,name,sic,sic_description
 1826470,"Petco Health & Wellness Company, Inc.",5990,"Retail-Retail Stores, NEC"
 1827090,"Certara, Inc.",7372,Services-Prepackaged Software
 1828016,Playtika Holding Corp.,7374,Services-Computer Processing & Data Preparation
+1828102,Karooooo Ltd.,7372,Services-Prepackaged Software
 1828108,"Aurora Innovation, Inc.",7373,Services-Computer Integrated Systems Design
 1828318,Enovix Corp,3690,"Miscellaneous Electrical Machinery, Equipment & Supplies"
 1830033,"PureCycle Technologies, Inc.",2821,"Plastic Materials, Synth Resins & Nonvulcan Elastomers"
@@ -1165,10 +1195,13 @@ cik,name,sic,sic_description
 1835856,Better Home & Finance Holding Co,6163,Loan Brokers
 1836833,Planet Labs PBC,3663,Radio & Tv Broadcasting & Communications Equipment
 1837240,Symbotic Inc.,3569,"General Industrial Machinery & Equipment, NEC"
+1840706,SOPHiA GENETICS SA,7374,Services-Computer Processing & Data Preparation
 1841408,Dave Inc./DE,6199,Finance Services
 1841666,APA Corp,1311,Crude Petroleum & Natural Gas
 1845097,Ardagh Metal Packaging S.A.,3411,Metal Cans
+1845338,monday.com Ltd.,7372,Services-Prepackaged Software
 1846576,"FIGS, Inc.",2300,Apparel & Other Finishd Prods of  Fabrics & Similar Matl
+1846832,dLocal Ltd,7389,"Services-Business Services, NEC"
 1847590,Bowman Consulting Group Ltd.,8742,Services-Management Consulting Services
 1849253,"RYAN SPECIALTY HOLDINGS, INC.",6411,"Insurance Agents, Brokers & Service"
 1849635,Trump Media & Technology Group Corp.,7370,"Services-Computer Programming, Data Processing, Etc."
@@ -1199,12 +1232,14 @@ cik,name,sic,sic_description
 1879016,Ivanhoe Electric Inc.,1000,Metal Mining
 1880319,"Perimeter Solutions, Inc.",2800,Chemicals & Allied Products
 1880661,TPG Inc.,6282,Investment Advice
+1881551,Solidion Technology Inc.,3690,"Miscellaneous Electrical Machinery, Equipment & Supplies"
 1883313,"Savers Value Village, Inc.",5900,Retail-Miscellaneous Retail
 1883685,DraftKings Inc.,7990,Services-Miscellaneous Amusement & Recreation
 1897762,Ingram Micro Holding Corp,5045,Wholesale-Computers & Peripheral Equipment & Software
 1899287,"Amprius Technologies, Inc.",3690,"Miscellaneous Electrical Machinery, Equipment & Supplies"
 1901440,UL Solutions Inc.,8734,Services-Testing Laboratories
 1902733,"nCino, Inc.",7372,Services-Prepackaged Software
+1906324,QuidelOrtho Corp,2835,In Vitro & In Vivo Diagnostic Substances
 1915657,HF Sinclair Corp,4610,Pipe Lines (No Natural Gas)
 1921865,ASP Isotopes Inc.,2890,Miscellaneous Chemical Products
 1929561,"RXO, Inc.",4700,Transportation Services
@@ -1257,3 +1292,4 @@ cik,name,sic,sic_description
 2082247,"FedEx Freight Holding Company, Inc.",4513,Air Courier Services
 2082866,"Pinnacle Financial Partners, Inc.",6021,National Commercial Banks
 2089271,Honeywell Aerospace Inc.,3724,Aircraft Engines & Engine Parts
+2115436,ExxonMobil Holdings Corp,2911,Petroleum Refining

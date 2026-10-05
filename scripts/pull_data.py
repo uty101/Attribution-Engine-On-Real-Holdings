@@ -4,8 +4,10 @@
     python scripts/pull_data.py --stage edgar
     python scripts/pull_data.py --stage figi
     python scripts/pull_data.py --stage sec
+    python scripts/pull_data.py --stage sec --overrides-only
     python scripts/pull_data.py --stage french
     python scripts/pull_data.py --stage prices
+    python scripts/pull_data.py --stage prices --new-only
     python scripts/pull_data.py --stage navret
     python scripts/pull_data.py --stage figi2
 
@@ -45,7 +47,14 @@ sys.path.insert(0, str(ROOT))
 
 import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
-from attrib.mapping import FALLBACK, judge_results, norm_ticker, security_map_from_dir, us_isin  # noqa: E402
+from attrib.mapping import (  # noqa: E402
+    FALLBACK,
+    cik_override_check,
+    judge_results,
+    norm_ticker,
+    security_map_from_dir,
+    us_isin,
+)  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
     NPORT_RETURNS,
@@ -379,6 +388,40 @@ def stage_sec(cfg, client: EdgarClient) -> None:
     write_csv(pd.DataFrame(rows, columns=SIC_CSV), RAW / "sec" / "sic.csv")
 
 
+def stage_sec_overrides(cfg, client: EdgarClient) -> None:
+    """`--stage sec --overrides-only` (instructions/03, step 3.0): the submissions JSON of every
+    override CIK, and of every CIK an override ticker reaches in the committed company_tickers.json
+    that sic.csv lacks. Those rows are written into sic.csv; every other row is left as it is, and
+    company_tickers.json is not downloaded again. Then the `cik` override name check goes to
+    data/raw/sec/cik_override_check.csv.
+    """
+    by_ticker: dict[str, set[int]] = {}
+    for r in json.loads((RAW / "sec" / "company_tickers.json").read_bytes()).values():
+        by_ticker.setdefault(norm_ticker(r["ticker"]), set()).add(int(r["cik_str"]))
+    ov = pd.read_csv(OVERRIDES, dtype=str, keep_default_na=False)
+    sic = pd.read_csv(RAW / "sec" / "sic.csv", dtype=str, keep_default_na=False)
+    have = set(sic["cik"].astype(int))
+    override_ciks = {int(v) for v in ov.loc[ov["kind"] == "cik", "value"]}
+    ticker_ciks = {c for t in ov.loc[ov["kind"] == "ticker", "value"] for c in by_ticker.get(norm_ticker(t), ())}
+    fetch = sorted(override_ciks | (ticker_ciks - have))
+    print(f"{len(override_ciks)} override CIKs, {len(ticker_ciks - have)} new CIKs from override tickers")
+    rows = []
+    for cik in fetch:
+        sub = client.get_json(SUBMISSIONS_URL.format(cik=cik))
+        rows.append([str(cik), sub.get("name") or "", str(sub.get("sic") or ""), sub.get("sicDescription") or ""])
+    new = pd.DataFrame(rows, columns=SIC_CSV)
+    prev = sic.set_index("cik")
+    for _, r in new.iterrows():
+        if r["cik"] in prev.index and tuple(prev.loc[r["cik"], ["name", "sic"]]) != (r["name"], r["sic"]):
+            print(f"  sic.csv row changed for CIK {r['cik']}: {tuple(prev.loc[r['cik'], ['name', 'sic']])} -> "
+                  f"{(r['name'], r['sic'])}")
+    old = sic[~sic["cik"].astype(int).isin(fetch)]
+    out = pd.concat([old, new], ignore_index=True)
+    out = out.assign(_k=out["cik"].astype(int)).sort_values("_k", kind="mergesort").drop(columns="_k")
+    write_csv(out[SIC_CSV], RAW / "sec" / "sic.csv")
+    write_csv(cik_override_check(ov, out), RAW / "sec" / "cik_override_check.csv")
+
+
 def monthly_block(text: str) -> str:
     """The monthly block of a French CSV: its column header line (starting with `,`) and the
     YYYYMM rows under it, up to the first line that is not one. Lines kept as filed, LF endings."""
@@ -492,6 +535,44 @@ def stage_prices(cfg) -> None:
     write_csv(nav.reset_index(), RAW / "prices" / "nav_adjclose.csv")
     print(nav.apply(lambda s: pd.Series({"first": s.first_valid_index(), "last": s.last_valid_index(),
                                          "n": s.notna().sum()})).to_string())
+
+
+def stage_prices_new(cfg) -> None:
+    """`--stage prices --new-only` (instructions/03, step 3.0): every yf_ticker in SECURITY_MAP that
+    is not already a column of adjclose.parquet is pulled and merged in as a new column; existing
+    columns are left untouched, because a full re-pull would restate adjusted closes as of a new
+    date. nav_adjclose.csv is not touched. missing.csv lists every SECURITY_MAP yf_ticker with no
+    column afterwards."""
+    smap = security_map_from_dir(ROOT / "data")
+    smap = smap[smap["yf_ticker"] != ""]
+    sec_ids = smap.groupby("yf_ticker")["sec_id"].agg(lambda s: ";".join(sorted(s)))
+    path = RAW / "prices" / "adjclose.parquet"
+    panel = pd.read_parquet(path)
+    tickers = sorted(set(sec_ids.index) - set(panel.columns))
+    print(f"{len(tickers)} new yf_tickers in batches of {PRICE_BATCH}: {tickers}")
+    got = []
+    for i in range(0, len(tickers), PRICE_BATCH):
+        batch = tickers[i : i + PRICE_BATCH]
+        close, errors = yf_close(batch, cfg)
+        for t in batch:
+            s = _series(close, t)
+            if s.empty:
+                print(f"  no rows: {t} ({errors.get(t, 'no yfinance error recorded')})")
+            else:
+                got.append(s)
+    n_dates = len(panel.index)
+    if got:
+        merged = panel.join(pd.concat(got, axis=1), how="outer").sort_index()
+        merged.index.name = "date"
+        merged = merged[sorted(merged.columns)].astype("float64")
+        if not merged.loc[panel.index, panel.columns].equals(panel):
+            sys.exit("stop under rule 4: merging new columns changed an existing column")
+        panel = merged
+        panel.to_parquet(path, engine="pyarrow", index=True)
+    missing = sorted(set(sec_ids.index) - set(panel.columns))
+    write_csv(pd.DataFrame({"yf_ticker": missing, "sec_ids": [sec_ids[t] for t in missing]}),
+              RAW / "prices" / "missing.csv")
+    print(f"panel {panel.shape} ({len(panel.index) - n_dates} new dates), {len(got)} added, {len(missing)} missing")
 
 
 def class_name(client: EdgarClient, class_id: str) -> tuple[str, dict]:
@@ -701,6 +782,8 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret", "figi2"])
+    ap.add_argument("--overrides-only", action="store_true", help="with --stage sec: instructions/03, step 3.0")
+    ap.add_argument("--new-only", action="store_true", help="with --stage prices: instructions/03, step 3.0")
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
     if args.stage == "figi2":
@@ -712,7 +795,7 @@ def main() -> None:
         update_manifest("figi")
         return
     if args.stage == "prices":
-        stage_prices(cfg)
+        stage_prices_new(cfg) if args.new_only else stage_prices(cfg)
         update_manifest("prices")
         return
     if args.stage == "french":
@@ -725,7 +808,7 @@ def main() -> None:
     elif args.stage == "edgar":
         update_manifest("edgar", stage_edgar(cfg, client))
     elif args.stage == "sec":
-        stage_sec(cfg, client)
+        stage_sec_overrides(cfg, client) if args.overrides_only else stage_sec(cfg, client)
         update_manifest("sec")
     elif args.stage == "navret":
         update_manifest("navret", stage_navret(cfg, client))
