@@ -144,6 +144,27 @@ def test_bucket_identity_every_real_book():
     assert worst < TOL
 
 
+def test_reused_ticker_never_prices_before_its_start():
+    """instructions/04_section_4.md, A answer 8: no position is priced on a price column whose
+    first valid date is after the position's q_start (a ticker reused by a later company, such as
+    INFO or STI, must not price an earlier holder)."""
+    prices = _real()[2]
+    first = {c: prices[c].first_valid_index() for c in prices.columns}
+    bad, n = [], 0
+    for eid, q, b, smap, prices in _each_real_book():
+        pos = book_quarter(b, smap, prices, q["q_start"], q["q_end"])
+        priced = pos[~pos["bucket"].isin(["Unmapped", "Unpriced"])]
+        yf = priced["sec_id"].map(smap.set_index("sec_id")["yf_ticker"])
+        for sid, tk in zip(priced["sec_id"], yf):
+            n += 1
+            if first[tk] > q["q_start"]:
+                bad.append([eid, q["t"], sid, tk, first[tk].date(), q["q_start"].date()])
+    print(f"{n} priced positions checked")
+    print(pd.DataFrame(bad, columns=["entity", "t", "sec_id", "yf_ticker", "first_valid", "q_start"]).to_string())
+    assert n > 0
+    assert bad == []
+
+
 def test_monthly_compounds_to_quarterly():
     worst, n = 0.0, 0
     for eid, q, b, smap, prices in _each_real_book():
