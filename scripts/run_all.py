@@ -32,13 +32,21 @@ from attrib.edgar import (  # noqa: E402
 )
 from attrib.mapping import security_map_from_dir  # noqa: E402
 from attrib.returns import (  # noqa: E402
+    BOOK_MONTHLY,
+    BOOK_QUARTERLY,
     NAV_MONTHLY,
+    apply_return_overrides,
+    book_monthly,
+    book_quarter,
+    book_return,
+    bucket_table,
     daily_returns,
     load_nav,
     load_prices,
     monthly_returns,
     nport_month_series,
     quarter_calendar,
+    return_overrides_with_t,
 )
 
 RAW = ROOT / "data" / "raw"
@@ -311,7 +319,45 @@ def section_2(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1, 2: section_2}
+def book_returns(cfg) -> dict:
+    """Step 3.2: POSITION_RETURNS, BUCKETS, the quarterly book table and monthly book returns for
+    every entity and quarter (D-17 as amended by instructions/03, step 3.2), with the
+    `quarter_return` overrides applied between `book_quarter` and `bucket_table` (D-16)."""
+    smap = security_map_from_dir(ROOT / "data")
+    prices = load_prices(ROOT / "data")
+    ivv = load_nav(ROOT / "data")[cfg.entities["ivv"].etf_ticker].dropna().index
+    cal = quarter_calendar(ivv, holdings_dates(cfg))
+    ov = return_overrides_with_t(read_str_csv(ROOT / "data" / "manual" / "overrides.csv"), cal)
+    pos, monthly = [], []
+    for eid in cfg.entities:
+        books = read_str_csv(PROCESSED / f"holdings_{eid}.csv").astype({"value_usd": float})
+        for _, q in cal.iterrows():
+            b = books[books["period_date"] == str(q["holdings_date"])].assign(t=q["t"])
+            pos.append(book_quarter(b, smap, prices, q["q_start"], q["q_end"]))
+            m = book_monthly(b, smap, prices, q["q_start"], q["q_end"])
+            monthly.append(pd.DataFrame({"entity": eid, "month": m.index.astype(str), "ret": m.to_numpy()}))
+    pos = apply_return_overrides(pd.concat(pos, ignore_index=True), ov)
+    buckets = bucket_table(pos)
+    bq = []
+    for (eid, t), g in pos.groupby(["entity", "t"], sort=False):
+        w = g.groupby("bucket")["weight"].sum()
+        bq.append([eid, t, book_return(buckets[(buckets["entity"] == eid) & (buckets["t"] == t)]),
+                   w.get("Unmapped", 0.0), w.get("Unpriced", 0.0), g.loc[g["delisted_in_quarter"], "weight"].sum()])
+    book_q = pd.DataFrame(bq, columns=BOOK_QUARTERLY)
+    write_csv(pos, PROCESSED / "position_returns.csv")
+    write_csv(buckets, TABLES / "buckets.csv")
+    write_csv(book_q, TABLES / "book_quarterly.csv")
+    write_csv(pd.concat(monthly, ignore_index=True)[BOOK_MONTHLY], TABLES / "book_monthly.csv")
+    return {"cal": cal, "book_q": book_q}
+
+
+def section_3(cfg) -> list[str]:
+    """Book returns (step 3.2)."""
+    book_returns(cfg)
+    return []
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3}
 
 
 def main() -> None:
