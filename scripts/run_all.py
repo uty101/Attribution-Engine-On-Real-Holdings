@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from attrib.brinson import EFFECTS, brinson_fachler, fill_empty  # noqa: E402
 from attrib.config import load_config  # noqa: E402
+from attrib.factors import ALPHA, factor_contrib_by_year, load_french, returns_based, rolling_betas  # noqa: E402
 from attrib.linking import carino, menchero  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     aggregate_book,
@@ -523,7 +524,101 @@ def section_4(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4}
+FACTOR_FIT = ["series_id", "series_kind", "coef", "value", "se_hac", "t_hac", "r2", "resid_vol_ann", "n_months"]
+FIT_COLS = ["value", "se_hac", "t_hac"]
+# kickoff 6.2 with `n_months` after `year` (instructions/05, C)
+FACTOR_BY_YEAR = ["series_id", "year", "n_months", "excess_return", "mkt", "smb", "hml", "rmw", "cma", "umd", ALPHA,
+                  "residual", "r2_full"]
+YEAR_TOL = 1e-12  # instructions/05, D 5.1: year rows sum to the year's excess return
+FACTOR_LABELS = {"mkt": "Mkt-RF", "smb": "SMB", "hml": "HML", "rmw": "RMW", "cma": "CMA", "umd": "UMD"}
+
+
+def factor_months(cfg, ff: pd.DataFrame) -> pd.PeriodIndex:
+    """Kickoff 3.3 with amendment 7 (instructions/05, C): the month after the first holdings date to
+    the earlier of the last return month and the last French month."""
+    first = pd.Period(cfg.sample.first_holdings_date, freq="M") + 1
+    last = min(pd.Period(cfg.sample.last_return_date, freq="M"), ff.index.max())
+    return pd.period_range(first, last, freq="M", name="month")
+
+
+def monthly_series(cfg, months: pd.PeriodIndex) -> dict[str, tuple[str, pd.Series]]:
+    """D-22: series_id -> (series_kind, monthly return by month) for `{fund}_book`, `{fund}_nav`,
+    then `{benchmark}_book`, in config order; a missing month has no row (D-33)."""
+    def by_month(df: pd.DataFrame, eid: str) -> pd.Series:
+        r = df[df["entity"] == eid].set_index("month")["ret"]
+        r.index = pd.PeriodIndex(r.index, freq="M", name="month")
+        return r[r.index.isin(months)]
+
+    book = read_str_csv(TABLES / "book_monthly.csv").astype({"ret": float})
+    nav = read_str_csv(TABLES / "nav_monthly.csv").astype({"ret": float})
+    out = {}
+    for kind in ("fund", "benchmark"):
+        for eid, e in cfg.entities.items():
+            if e.type != kind:
+                continue
+            out[f"{eid}_book"] = ("book", by_month(book, eid))
+            if kind == "fund":
+                out[f"{eid}_nav"] = ("nav", by_month(nav, eid))
+    return out
+
+
+def chart_2(cfg, fund: str, rb: pd.DataFrame, path: Path) -> None:
+    """Chart 2 (instructions/05, Section C): the 6 rolling book betas against window end."""
+    x = rb.index.to_timestamp(how="end").normalize()
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.axhline(0, color="0.5", linewidth=0.8)
+    for f in cfg.factors.names:
+        ax.plot(x, rb[f].to_numpy(), label=FACTOR_LABELS[f], linewidth=1.6)
+    ax.set_ylabel("Beta")
+    ax.legend(loc="best", frameon=False, ncol=3)
+    ax.set_title(f"{fund.capitalize()}: rolling {cfg.factors.rolling_window}-month factor betas (book)")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
+    plt.close(fig)
+
+
+def section_5(cfg) -> list[str]:
+    """Step 5.1 (instructions/05, Section C): the full-sample HAC fit of every series to
+    factor_fit.csv, Table 2 to factor_by_year.csv, the rolling book betas to rolling_betas.csv and
+    Chart 2 per fund. Funds that failed the gate keep their factor_fit rows only (Convention 4.19)."""
+    failures: list[str] = []
+    names = list(cfg.factors.names)
+    ff = load_french(ROOT / "data")
+    months = factor_months(cfg, ff)
+    fac = ff.loc[months, names]
+    gate_df = read_str_csv(TABLES / "gate.csv").set_index("fund")
+    excluded = {f for f in gate_df.index if gate_df.at[f, "pass"] != "True"}
+    for f in sorted(excluded):
+        print(f"{f}: excluded from Table 2, rolling betas and Chart 2, it failed the NAV gate")
+
+    fit_rows, years, rolls = [], [], []
+    for sid, (kind, ret) in monthly_series(cfg, months).items():
+        excess = ret - ff["rf"].reindex(ret.index)  # Convention 4.15
+        fit = returns_based(excess, fac, cfg.factors.hac_maxlags)
+        tab = pd.DataFrame({c: fit[c] for c in FIT_COLS}).rename_axis("coef").reset_index()
+        fit_rows.append(tab.assign(series_id=sid, series_kind=kind, r2=fit["r2"],
+                                   resid_vol_ann=fit["resid_vol_ann"], n_months=fit["n_months"]))
+        if sid.rsplit("_", 1)[0] in excluded:
+            continue
+        t2 = factor_contrib_by_year(excess, fac, fit)
+        err = (t2[[*names, ALPHA, "residual"]].sum(axis=1) - t2["excess_return"]).abs().max()
+        if err >= YEAR_TOL:
+            failures.append(f"{sid}: Table 2 year rows miss the excess return by {err!r}")
+        years.append(t2.assign(series_id=sid))
+        if kind == "book":  # D-23
+            rb = rolling_betas(excess, fac, cfg.factors.rolling_window)
+            rolls.append(rb.reset_index().assign(series_id=sid, month_end=rb.index.astype(str)))
+            eid = sid.rsplit("_", 1)[0]
+            if cfg.entities[eid].type == "fund":
+                chart_2(cfg, eid, rb, FIGURES / f"{eid}_rolling_betas.png")
+    write_csv(pd.concat(fit_rows, ignore_index=True)[FACTOR_FIT], TABLES / "factor_fit.csv")
+    write_csv(pd.concat(years, ignore_index=True)[FACTOR_BY_YEAR], TABLES / "factor_by_year.csv")
+    write_csv(pd.concat(rolls, ignore_index=True)[["series_id", "month_end", *names]], TABLES / "rolling_betas.csv")
+    return failures
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5}
 
 
 def main() -> None:
