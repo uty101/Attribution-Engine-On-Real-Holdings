@@ -52,7 +52,7 @@ from attrib.edgar import (  # noqa: E402
 from attrib.mapping import security_map_from_dir  # noqa: E402
 from attrib.bootstrap import bootstrap_mean  # noqa: E402
 from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
-from attrib.report import FACTOR_LABELS, chart_1_png, chart_2_png, chart_3_png  # noqa: E402
+from attrib.report import FACTOR_LABELS, build_report, chart_1_png, chart_2_png, chart_3_png  # noqa: E402
 from attrib.risk import (  # noqa: E402
     DAILY_TO_MONTHLY,
     MONTHS_PER_YEAR,
@@ -824,7 +824,59 @@ def section_6(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5, 6: section_6}
+REPORTS = ROOT / "outputs" / "reports"
+REPORT_PAGES = 4  # instructions/07, C.2: exactly 4 pages for each of the 3 funds
+
+
+def report_results(cfg, fund: str) -> dict:
+    """D-26 as set by instructions/07, C.2: the output tables cut to `fund` (book_quarterly also
+    keeps its benchmark's rows, factor_fit its book and NAV series), the names on the charts, and
+    the 3 chart PNGs read from outputs/figures/ as written, not rendered again."""
+    def table(stem: str) -> pd.DataFrame:
+        return pd.read_csv(TABLES / f"{stem}.csv")
+
+    bench = cfg.entities[fund].benchmark
+    name, bench_name = fund_label(cfg, fund)
+    return {
+        "linked": table("linked").query("fund == @fund"),
+        "factor_by_year": table("factor_by_year").query("series_id == @fund + '_book'"),
+        "factor_fit": table("factor_fit").query("series_id in [@fund + '_book', @fund + '_nav']"),
+        "risk_quarterly": table("risk_quarterly").query("fund == @fund"),
+        "te_realised": table("te_realised").query("fund == @fund"),
+        "gate": table("gate").query("fund == @fund"),
+        "bootstrap": table("bootstrap").query("fund == @fund"),
+        "book_quarterly": table("book_quarterly").query("entity in [@fund, @bench]"),
+        "coverage": table("coverage").query("entity == @fund"),
+        "fund_name": name,
+        "benchmark_name": bench_name,
+        "chart1": (FIGURES / f"{fund}_alloc_vs_sel.png").read_bytes(),
+        "chart2": (FIGURES / f"{fund}_rolling_betas.png").read_bytes(),
+        "chart3": (FIGURES / f"{fund}_cte_top15.png").read_bytes(),
+    }
+
+
+def section_7(cfg) -> list[str]:
+    """Step 7.4: outputs/reports/{fund}.pdf for every fund that passed the gate, built by
+    `build_report` from the committed tables and figures; each must have exactly 4 pages (pypdf)."""
+    from pypdf import PdfReader
+
+    failures: list[str] = []
+    gate_df = read_str_csv(TABLES / "gate.csv").set_index("fund")
+    for fund, e in cfg.entities.items():
+        if e.type != "fund":
+            continue
+        if gate_df.at[fund, "pass"] != "True":  # Convention 4.19
+            print(f"{fund}: no report, it failed the NAV gate (corr {gate_df.at[fund, 'corr']})")
+            continue
+        path = build_report(fund, report_results(cfg, fund), REPORTS / f"{fund}.pdf")
+        n = len(PdfReader(path).pages)
+        print(f"{path.relative_to(ROOT).as_posix()}: {path.stat().st_size} bytes, {n} pages")
+        if n != REPORT_PAGES:
+            failures.append(f"{fund}: report has {n} pages, not {REPORT_PAGES}")
+    return failures
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5, 6: section_6, 7: section_7}
 
 
 def main() -> None:
