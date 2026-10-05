@@ -18,6 +18,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from pc.cov import window_daily  # noqa: E402
 from pc.stats import stationary_bootstrap_indices  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,17 @@ from attrib.edgar import (  # noqa: E402
 from attrib.mapping import security_map_from_dir  # noqa: E402
 from attrib.bootstrap import bootstrap_mean  # noqa: E402
 from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
+from attrib.risk import (  # noqa: E402
+    DAILY_TO_MONTHLY,
+    MONTHS_PER_YEAR,
+    active_cov,
+    active_share,
+    fill_daily,
+    issuer_weights,
+    risk_weights,
+    te_decomposition,
+    ticker_buckets,
+)
 from attrib.returns import (  # noqa: E402
     BOOK_MONTHLY,
     BUCKETS_ORDER,
@@ -730,7 +742,134 @@ def section_5(cfg) -> list[str]:
     return failures + exposures(cfg, ff, funds, rb_by)
 
 
-SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5}
+# kickoff 6.2 with the 2 unmapped columns after `active_share` (instructions/06, C)
+RISK_QUARTERLY = ["fund", "holdings_date", "active_share", "unmapped_weight_fund", "unmapped_weight_bench",
+                  "te_exante", "excluded_weight_fund", "excluded_weight_bench", "n_names", "max_fill_share",
+                  "delta_lw", "ridged"]
+CTE_POSITIONS = ["fund", "holdings_date", "ticker", "bucket", "a", "mcte", "cte"]
+CTE_SECTORS = ["fund", "holdings_date", "bucket", "cte"]
+TE_REALISED = ["fund", "te_realised", "te_exante_mean", "n_months"]  # D-25
+EULER_TOL = 1e-12  # kickoff 5.10: sum CTE = TE
+
+
+def chart_3(cfg, fund: str, dec: pd.DataFrame, te: float, h: str, path: Path) -> None:
+    """Chart 3 (instructions/06, C): the `risk.top_n_positions` largest CTE positions at h by |CTE|,
+    as horizontal bars in percentage points of annualised TE, sorted by CTE with the largest at
+    the top, positive and negative in 2 colours, with a vertical zero line."""
+    n = cfg.risk.top_n_positions
+    top = dec.assign(_abs=dec["cte"].abs()).sort_values(["_abs", "ticker"], ascending=[False, True],
+                                                         kind="mergesort").head(n)
+    top = top.sort_values(["cte", "ticker"], ascending=[True, False], kind="mergesort")  # barh draws bottom-up
+    share = float(top["cte"].sum()) / te
+    name, bench = fund_label(cfg, fund)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    vals = 100 * top["cte"].to_numpy()
+    ax.barh(top["ticker"], vals, color=np.where(vals >= 0, "#d62728", "#1f77b4"))
+    ax.axvline(0, color="0.3", linewidth=0.8)
+    ax.set_xlabel("Contribution to ex-ante tracking error (percentage points, annualised)")
+    fig.suptitle(f"{name} vs {bench}: top {n} contributions to ex-ante tracking error, {h}")
+    ax.set_title(f"Ex-ante TE {100 * te:.2f}%; these {n} positions explain {100 * share:.1f}% of it", fontsize=9)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
+    plt.close(fig)
+
+
+def realised_te(cfg, funds: list[str], risk_q: pd.DataFrame) -> pd.DataFrame:
+    """D-25 (instructions/06, C): per fund, std (ddof 1) of the monthly book active return (fund
+    book minus its benchmark book) x sqrt(months_per_year) over the 83 months of the Section 5
+    monthly sample (`factor_months`), the mean of the ex-ante TEs and n_months."""
+    months = factor_months(cfg, load_french(ROOT / "data"))
+    book = read_str_csv(TABLES / "book_monthly.csv").astype({"ret": float})
+    rows = []
+    for fund in funds:
+        r = {e: book[book["entity"] == e].set_index("month")["ret"] for e in (fund, cfg.entities[fund].benchmark)}
+        act = (r[fund] - r[cfg.entities[fund].benchmark]).reindex(months.astype(str)).dropna()
+        te_ex = risk_q.loc[risk_q["fund"] == fund, "te_exante"]
+        rows.append([fund, float(act.std(ddof=1) * np.sqrt(cfg.risk.months_per_year)), float(te_ex.mean()), len(act)])
+    return pd.DataFrame(rows, columns=TE_REALISED)
+
+
+def section_6(cfg) -> list[str]:
+    """Steps 6.1 and 6.2 (instructions/06, C) for every fund that passed the gate, at each of the
+    28 holdings dates: active share on issuer weights (all positions), the ex-ante TE and its Euler
+    split on the risk weights over the window of daily returns ending at q_start(h), filled and
+    shrunk; then risk_quarterly.csv, cte_positions.csv, cte_sectors.csv, te_realised.csv and
+    Chart 3 at the last holdings date."""
+    rk = cfg.risk
+    if (rk.daily_to_monthly, rk.months_per_year) != (DAILY_TO_MONTHLY, MONTHS_PER_YEAR):
+        return [f"config risk ({rk.daily_to_monthly}, {rk.months_per_year}) differs from kickoff 5.10 (21, 12)"]
+    failures: list[str] = []
+    gate_df = read_str_csv(TABLES / "gate.csv").set_index("fund")
+    funds = []
+    for fund, e in cfg.entities.items():
+        if e.type != "fund":
+            continue
+        if gate_df.at[fund, "pass"] != "True":  # Convention 4.19
+            print(f"{fund}: excluded from Section 6, it failed the NAV gate (corr {gate_df.at[fund, 'corr']})")
+            continue
+        funds.append(fund)
+    pos = read_str_csv(PROCESSED / "position_returns.csv").astype({"t": int, "weight": float})
+    smap = read_str_csv(PROCESSED / "security_map.csv")
+    rets = daily_returns(load_prices(ROOT / "data"))
+    ivv = load_nav(ROOT / "data")[cfg.entities["ivv"].etf_ticker].dropna().index
+    cal = quarter_calendar(ivv, holdings_dates(cfg))
+    last_h = str(cfg.sample.last_holdings_date)
+
+    rq, cte_p, cte_s, fills, last = [], [], [], [], {}
+    for fund in funds:
+        bench = cfg.entities[fund].benchmark
+        for t, h, qs in zip(cal["t"], cal["holdings_date"], cal["q_start"]):
+            posP = pos[(pos["entity"] == fund) & (pos["t"] == t)]
+            posB = pos[(pos["entity"] == bench) & (pos["t"] == t)]
+            AS = active_share(issuer_weights(posP, smap), issuer_weights(posB, smap))
+            unm = [float(p.loc[p["bucket"] == "Unmapped", "weight"].sum()) for p in (posP, posB)]
+            excl = [float(p.loc[p["bucket"].isin(NEUTRAL), "weight"].sum()) for p in (posP, posB)]
+            wP, wB = risk_weights(posP, smap), risk_weights(posB, smap)
+            union = sorted(set(wP.index) | set(wB.index))
+            buckets = ticker_buckets(smap, union)
+            X = window_daily(rets[union], qs, rk.cov_months)
+            filled, share = fill_daily(X, buckets)
+            S, info = active_cov(filled, qs, rk.cov_months, rk.max_cond)
+            a = wP.reindex(union, fill_value=0.0) - wB.reindex(union, fill_value=0.0)
+            dec = te_decomposition(a, S).assign(bucket=buckets.to_numpy())
+            te = float(np.sqrt(MONTHS_PER_YEAR * a.to_numpy() @ S.to_numpy() @ a.to_numpy()))
+            err = abs(float(dec["cte"].sum()) - te)
+            if err >= EULER_TOL:
+                failures.append(f"{fund} {h}: sum CTE misses TE by {err!r}")
+            rq.append([fund, str(h), AS, *unm, te, *excl, len(union), float(share.max()), info["delta_lw"],
+                       info["ridged"]])
+            cte_p.append(dec.assign(fund=fund, holdings_date=str(h))[CTE_POSITIONS])
+            sec = dec.groupby("bucket")["cte"].sum().reindex(BUCKETS_ORDER[:12], fill_value=0.0)
+            cte_s.append(pd.DataFrame({"fund": fund, "holdings_date": str(h), "bucket": sec.index, "cte": sec.to_numpy()}))
+            fills.append([fund, str(h), info["n_days"], int((share > 0).sum()), share.idxmax(), float(share.max()),
+                          info["cond_before"], info["ridge"]])
+            if str(h) == last_h:
+                last[fund] = (dec, te, share)
+    risk_q = pd.DataFrame(rq, columns=RISK_QUARTERLY)
+    write_csv(risk_q, TABLES / "risk_quarterly.csv")
+    write_csv(pd.concat(cte_p, ignore_index=True), TABLES / "cte_positions.csv")
+    cte_sec = pd.concat(cte_s, ignore_index=True)
+    write_csv(cte_sec, TABLES / "cte_sectors.csv")
+    write_csv(realised_te(cfg, funds, risk_q), TABLES / "te_realised.csv")
+    for fund in funds:
+        dec, te, _ = last[fund]
+        chart_3(cfg, fund, dec, te, last_h, FIGURES / f"{fund}_cte_top15.png")
+
+    sec_err = (cte_sec.groupby(["fund", "holdings_date"])["cte"].sum()
+               - risk_q.set_index(["fund", "holdings_date"])["te_exante"]).abs().max()
+    if sec_err >= EULER_TOL:
+        failures.append(f"sector CTE sums miss TE by {sec_err!r}")
+    f = pd.DataFrame(fills, columns=["fund", "holdings_date", "n_days", "n_filled", "max_fill_ticker",
+                                     "max_fill_share", "cond_before", "ridge"])
+    with pd.option_context("display.width", 250):
+        print("fill and conditioning per date:")
+        print(f.to_string())
+        print(f"largest |sum CTE - TE| over funds and dates and over sector sums: {sec_err!r}")
+    return failures
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5, 6: section_6}
 
 
 def main() -> None:

@@ -88,3 +88,36 @@ def active_cov(returns_d: pd.DataFrame, q, months: int, max_cond: float) -> tupl
         "n_days": len(X),
     }
     return S * DAILY_TO_MONTHLY, info
+
+
+MONTHS_PER_YEAR = 12  # kickoff 5.10: TE = sqrt(12 a' Sigma_m a) (config `risk.months_per_year`)
+TE_DECOMPOSITION = ["ticker", "a", "mcte", "cte"]
+
+
+def issuer_weights(pos: pd.DataFrame, smap: pd.DataFrame) -> pd.Series:
+    """Convention 4.5 book weights of every row of 1 book's POSITION_RETURNS, unmapped included,
+    summed by issuer (Convention 4.17 as amended by amendment 10): the SEC CIK from SECURITY_MAP,
+    or the row's own `sec_id` when it has no CIK. CIK keys are `cik:<n>`, others `sec_id:<id>`."""
+    cik = pos["sec_id"].map(smap.set_index("sec_id")["cik"]).fillna("").astype(str)
+    key = np.where(cik != "", "cik:" + cik, "sec_id:" + pos["sec_id"].astype(str))
+    w = pos["weight"].astype("float64").groupby(key).sum().sort_index()
+    w.index.name = "issuer"
+    return w
+
+
+def active_share(wP_issuer: pd.Series, wB_issuer: pd.Series) -> float:
+    """AS = 1/2 sum_k |w_k^P - w_k^B| over the union of issuers k (kickoff 5.10)."""
+    idx = wP_issuer.index.union(wB_issuer.index)
+    d = wP_issuer.reindex(idx, fill_value=0.0) - wB_issuer.reindex(idx, fill_value=0.0)
+    return float(0.5 * d.abs().sum())
+
+
+def te_decomposition(a: pd.Series, sigma_m: pd.DataFrame) -> pd.DataFrame:
+    """Kickoff 5.10: TE = sqrt(12 a' Sigma_m a), MCTE_i = 12 (Sigma_m a)_i / TE, CTE_i = a_i MCTE_i,
+    so sum_i CTE_i = TE in annualised TE units. `a` is by ticker; `sigma_m` is reindexed to it."""
+    S = sigma_m.reindex(index=a.index, columns=a.index).to_numpy(dtype="float64")
+    x = a.to_numpy(dtype="float64")
+    Sa = S @ x
+    te = float(np.sqrt(MONTHS_PER_YEAR * x @ Sa))
+    mcte = MONTHS_PER_YEAR * Sa / te
+    return pd.DataFrame({"ticker": a.index.to_numpy(), "a": x, "mcte": mcte, "cte": x * mcte})[TE_DECOMPOSITION]
