@@ -25,7 +25,16 @@ sys.path.insert(0, str(ROOT))
 
 from attrib.brinson import EFFECTS, brinson_fachler, fill_empty  # noqa: E402
 from attrib.config import load_config  # noqa: E402
-from attrib.factors import ALPHA, factor_contrib_by_year, load_french, returns_based, rolling_betas  # noqa: E402
+from attrib.factors import (  # noqa: E402
+    ALPHA,
+    factor_contrib_by_year,
+    fallback_betas,
+    holdings_exposure,
+    load_french,
+    returns_based,
+    rolling_betas,
+    stock_betas,
+)
 from attrib.linking import carino, menchero  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     aggregate_book,
@@ -47,6 +56,7 @@ from attrib.returns import (  # noqa: E402
     BUCKETS_ORDER,
     BOOK_QUARTERLY,
     NAV_MONTHLY,
+    NEUTRAL,
     apply_return_overrides,
     book_monthly,
     book_quarter,
@@ -578,10 +588,106 @@ def chart_2(cfg, fund: str, rb: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
+HOLDINGS_EXPOSURES = ["fund", "holdings_date", "side", "mkt", "smb", "hml", "rmw", "cma", "umd", "excluded_weight"]
+SIDES = ["fund", "benchmark", "active"]
+EXPOSURE_DATES = ["2019-09-30", "2022-12-31", "2026-06-30"]  # instructions/05, E 4
+
+
+def priced_mapped_weights() -> tuple[pd.DataFrame, list[str]]:
+    """Per (entity, t, yf_ticker): the summed weight and the FF12 bucket of the priced, mapped
+    positions of POSITION_RETURNS (instructions/05, C: the stock universe and the exposures)."""
+    pos = read_str_csv(PROCESSED / "position_returns.csv").astype({"t": int, "weight": float})
+    smap = read_str_csv(PROCESSED / "security_map.csv").set_index("sec_id")["yf_ticker"]
+    pm = pos[~pos["bucket"].isin(NEUTRAL)].assign(yf_ticker=lambda d: d["sec_id"].map(smap))
+    g = pm.groupby(["entity", "t", "yf_ticker"], sort=True)
+    two = g["bucket"].nunique()
+    failures = [f"{e} t={t}: {tk} sits in 2 buckets" for (e, t, tk), n in two.items() if n > 1]
+    return g.agg(weight=("weight", "sum"), bucket=("bucket", "first")).reset_index(), failures
+
+
+def chart_exposures(cfg, fund: str, hb: pd.DataFrame, rb: pd.DataFrame, path: Path) -> None:
+    """instructions/05, C: 2 x 3 panels, 1 per factor. Holdings-based fund exposure at each h
+    (markers) and the rolling returns-based book beta whose window ends at h's month (line)."""
+    x = pd.to_datetime(hb["holdings_date"])
+    rbh = rb.reindex(pd.PeriodIndex(x, freq="M"))
+    fig, axes = plt.subplots(2, 3, figsize=(10, 6), sharex=True)
+    for ax, f in zip(axes.flat, cfg.factors.names):
+        ax.axhline(0, color="0.5", linewidth=0.8)
+        ax.plot(x, rbh[f].to_numpy(), color="#1f77b4", linewidth=1.6,
+                label=f"Returns-based, rolling {cfg.factors.rolling_window} months (book)")
+        ax.plot(x, hb[f].to_numpy(), "o", color="#d62728", markersize=3.5, label="Holdings-based")
+        ax.set_title(FACTOR_LABELS[f], fontsize=10)
+        ax.tick_params(axis="x", labelrotation=45, labelsize=8)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Beta")
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
+    fig.suptitle(f"{fund.capitalize()}: holdings-based vs returns-based factor exposures")
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
+    plt.close(fig)
+
+
+def exposures(cfg, ff: pd.DataFrame, funds: list[str], rolls: dict[str, pd.DataFrame]) -> list[str]:
+    """Step 5.2 (instructions/05, C): stock betas at each holdings date h over the 36 calendar months
+    ending at h's month, the fund, benchmark and active exposures to holdings_exposures.csv with
+    each side's excluded weight, the exposures chart per fund and the IVV sanity check (D 5.2)."""
+    names = list(cfg.factors.names)
+    fc = cfg.factors
+    w, failures = priced_mapped_weights()
+    mret = monthly_returns(load_prices(ROOT / "data"))
+    excess = mret.sub(ff["rf"].reindex(mret.index), axis=0)  # Convention 4.15
+    ivv = load_nav(ROOT / "data")[cfg.entities["ivv"].etf_ticker].dropna().index
+    cal = quarter_calendar(ivv, holdings_dates(cfg))
+    sides = {fund: (fund, cfg.entities[fund].benchmark) for fund in funds}
+    in_scope = {e for pair in sides.values() for e in pair}
+    rows, diag = [], []
+    for t, h in zip(cal["t"], cal["holdings_date"]):
+        wt = w[w["t"] == t]
+        universe = sorted(set(wt.loc[wt["entity"].isin(in_scope), "yf_ticker"]))
+        betas = stock_betas(excess.reindex(columns=universe), ff[names], pd.Period(h, freq="M"),
+                            fc.stock_beta_window, fc.stock_beta_min_obs)
+        for fund, (eid_f, eid_b) in sides.items():
+            out = {}
+            for side, eid in (("fund", eid_f), ("benchmark", eid_b)):
+                g = wt[wt["entity"] == eid].set_index("yf_ticker")
+                own = betas.reindex(g.index).notna().all(axis=1)
+                has = fallback_betas(betas.reindex(g.index), g["bucket"]).notna().all(axis=1)
+                out[side] = holdings_exposure(g["weight"], betas, g["bucket"])
+                excl = 1.0 - float(g.loc[has, "weight"].sum())  # book weights sum to 1 (Convention 4.5)
+                rows.append([fund, str(h), side, *out[side][names], excl])
+                diag.append([fund, side, float(g.loc[has & ~own, "weight"].sum()), float(g.loc[~has, "weight"].sum()),
+                             int((has & ~own).sum()), int((~has).sum())])
+            rows.append([fund, str(h), "active", *(out["fund"] - out["benchmark"])[names], np.nan])
+    hx = pd.DataFrame(rows, columns=HOLDINGS_EXPOSURES)
+    order = {fd: i for i, fd in enumerate(funds)}
+    hx = hx.assign(_f=hx["fund"].map(order), _s=hx["side"].map(SIDES.index))
+    hx = hx.sort_values(["_f", "holdings_date", "_s"], kind="mergesort")[HOLDINGS_EXPOSURES].reset_index(drop=True)
+    write_csv(hx, TABLES / "holdings_exposures.csv")
+    for fund in funds:
+        chart_exposures(cfg, fund, hx[(hx["fund"] == fund) & (hx["side"] == "fund")], rolls[f"{fund}_book"],
+                        FIGURES / f"{fund}_exposures_hb_vs_rb.png")
+
+    d = pd.DataFrame(diag, columns=["fund", "side", "fallback_weight", "no_beta_weight", "n_fallback", "n_no_beta"])
+    with pd.option_context("display.width", 250):
+        print("beta coverage per side, the largest value over the holdings dates:")
+        print(d.groupby(["fund", "side"], sort=False).max().to_string())
+        print("holdings-based exposures at the review dates (instructions/05, E 4):")
+        print(hx[hx["holdings_date"].isin(EXPOSURE_DATES)].to_string())
+        ivv_side = [fd for fd in funds if cfg.entities[fd].benchmark == "ivv"]
+        if ivv_side:
+            s = hx[(hx["fund"] == ivv_side[0]) & (hx["side"] == "benchmark")]
+            print("IVV sanity check (instructions/05, D 5.2): holdings-based ivv_book market beta at every h")
+            print(s[["holdings_date", "mkt", "excluded_weight"]].to_string())
+    return failures
+
+
 def section_5(cfg) -> list[str]:
-    """Step 5.1 (instructions/05, Section C): the full-sample HAC fit of every series to
-    factor_fit.csv, Table 2 to factor_by_year.csv, the rolling book betas to rolling_betas.csv and
-    Chart 2 per fund. Funds that failed the gate keep their factor_fit rows only (Convention 4.19)."""
+    """Steps 5.1 and 5.2 (instructions/05, Section C): the full-sample HAC fit of every series to
+    factor_fit.csv, Table 2 to factor_by_year.csv, the rolling book betas to rolling_betas.csv,
+    Chart 2 per fund, then the holdings-based exposures (`exposures`). Funds that failed the gate
+    keep their factor_fit rows only (Convention 4.19)."""
     failures: list[str] = []
     names = list(cfg.factors.names)
     ff = load_french(ROOT / "data")
@@ -592,7 +698,7 @@ def section_5(cfg) -> list[str]:
     for f in sorted(excluded):
         print(f"{f}: excluded from Table 2, rolling betas and Chart 2, it failed the NAV gate")
 
-    fit_rows, years, rolls = [], [], []
+    fit_rows, years, rolls, rb_by = [], [], [], {}
     for sid, (kind, ret) in monthly_series(cfg, months).items():
         excess = ret - ff["rf"].reindex(ret.index)  # Convention 4.15
         fit = returns_based(excess, fac, cfg.factors.hac_maxlags)
@@ -608,6 +714,7 @@ def section_5(cfg) -> list[str]:
         years.append(t2.assign(series_id=sid))
         if kind == "book":  # D-23
             rb = rolling_betas(excess, fac, cfg.factors.rolling_window)
+            rb_by[sid] = rb
             rolls.append(rb.reset_index().assign(series_id=sid, month_end=rb.index.astype(str)))
             eid = sid.rsplit("_", 1)[0]
             if cfg.entities[eid].type == "fund":
@@ -615,7 +722,12 @@ def section_5(cfg) -> list[str]:
     write_csv(pd.concat(fit_rows, ignore_index=True)[FACTOR_FIT], TABLES / "factor_fit.csv")
     write_csv(pd.concat(years, ignore_index=True)[FACTOR_BY_YEAR], TABLES / "factor_by_year.csv")
     write_csv(pd.concat(rolls, ignore_index=True)[["series_id", "month_end", *names]], TABLES / "rolling_betas.csv")
-    return failures
+    fits = pd.concat(fit_rows, ignore_index=True)
+    print("IVV sanity check (instructions/05, D 5.2): full-sample returns-based ivv_book market beta")
+    print(fits.loc[(fits["series_id"] == "ivv_book") & (fits["coef"] == "mkt"),
+                   ["series_id", "coef", "value", "se_hac", "n_months"]].to_string())
+    funds = [k for k, e in cfg.entities.items() if e.type == "fund" and k not in excluded]
+    return failures + exposures(cfg, ff, funds, rb_by)
 
 
 SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5}

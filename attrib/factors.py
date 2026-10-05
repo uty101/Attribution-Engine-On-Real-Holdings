@@ -98,3 +98,47 @@ def factor_contrib_by_year(excess: pd.Series, factors: pd.DataFrame, fit: dict) 
     out.index.name = "year"
     return out.reset_index()[["year", "n_months", "excess_return", *factors.columns, ALPHA, "residual", "r2_full"]]
 
+
+def stock_betas(monthly_excess: pd.DataFrame, factors: pd.DataFrame, end_month, window: int, min_obs: int) -> pd.DataFrame:
+    """Factor betas per stock (kickoff 5.8): OLS with a constant of each column of `monthly_excess`
+    on the factors over the `window` calendar months ending at `end_month`, on the months the
+    stock has a return. Indexed by the columns of `monthly_excess`; a stock with fewer than
+    `min_obs` months has a blank row (`fallback_betas` fills it)."""
+    end = pd.Period(end_month, freq="M")
+    months = pd.period_range(end - (window - 1), end, freq="M")
+    f = factors.reindex(months)
+    if f.isna().any().any():
+        raise ValueError(f"factors missing in the window ending {end}")
+    Y = monthly_excess.reindex(index=months).to_numpy(dtype="float64")
+    X = np.column_stack([np.ones(len(months)), f.to_numpy()])
+    ok = ~np.isnan(Y)
+    n = ok.sum(axis=0)
+    out = np.full((Y.shape[1], f.shape[1]), np.nan)
+    full = n == len(months)
+    if full.any():  # stocks with every month share 1 design matrix
+        out[full] = np.linalg.lstsq(X, Y[:, full], rcond=None)[0][1:].T
+    for j in np.flatnonzero((n >= min_obs) & ~full):
+        out[j] = np.linalg.lstsq(X[ok[:, j]], Y[ok[:, j], j], rcond=None)[0][1:]
+    return pd.DataFrame(out, index=monthly_excess.columns, columns=f.columns)
+
+
+def fallback_betas(betas: pd.DataFrame, buckets: pd.Series) -> pd.DataFrame:
+    """Kickoff 5.8: a blank row takes the mean of the valid rows of `betas` in its bucket
+    (`buckets`, indexed like `betas`); it stays blank if its bucket has none."""
+    b = buckets.reindex(betas.index)
+    valid = betas.notna().all(axis=1)
+    means = betas[valid].groupby(b[valid]).mean()
+    out = betas.copy()
+    blank = ~valid
+    out.loc[blank] = means.reindex(b[blank]).to_numpy()
+    return out
+
+
+def holdings_exposure(weights: pd.Series, betas: pd.DataFrame, buckets: pd.Series) -> pd.Series:
+    """Exposure per factor of 1 side (kickoff 5.8; instructions/05, Section C): sum of w_i beta_i
+    over the positions of `weights` (priced, mapped, by ticker) that have a beta, own or the
+    bucket fallback among the positions of this side, with their weights renormalised to 1."""
+    b = fallback_betas(betas.reindex(weights.index), buckets.reindex(weights.index))
+    has = b.notna().all(axis=1)
+    w = weights[has] / weights[has].sum()
+    return b[has].T @ w
