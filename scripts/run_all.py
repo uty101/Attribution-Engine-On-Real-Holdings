@@ -31,6 +31,7 @@ from attrib.edgar import (  # noqa: E402
     units_check,
 )
 from attrib.mapping import security_map_from_dir  # noqa: E402
+from attrib.returns import NAV_MONTHLY, load_nav, monthly_returns, nport_month_series  # noqa: E402
 
 RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
@@ -166,11 +167,57 @@ def section_1(cfg) -> list[str]:
     return failures
 
 
+# instructions/02c_section_2_completion.md, Section B: OPEN-33 (b), the accepted Akre gap
+AKRE_GAP_MONTHS = {"2025-08", "2025-09", "2025-10"}
+
+
+def nav_monthly(cfg) -> tuple[pd.DataFrame, list[str]]:
+    """NAV_MONTHLY for every fund, October 2019 to September 2026 (instructions/02b step 2.1b, 02c C 1).
+
+    `nav_source = "nport"`: N-PORT B.5 month by month (`nport_month_series`); `"yfinance"`: the
+    NAV ticker's month-end return. Missing months have no row. A `nport` fund may miss only the
+    months of the accepted gap (02c, Section B).
+    """
+    nav = load_nav(ROOT / "data")
+    mret = monthly_returns(nav)
+    first = pd.Period(cfg.sample.first_holdings_date, freq="M") + 1
+    months = list(pd.period_range(first, pd.Period(cfg.sample.last_return_date, freq="M"), freq="M"))
+    resolved = read_str_csv(RAW / "edgar" / "nport_returns" / "series_resolved.csv").set_index("entity")
+    out, failures = [], []
+    for eid, e in cfg.entities.items():
+        if e.type != "fund":
+            continue
+        if e.nav_source == "nport":
+            b5 = read_str_csv(RAW / "edgar" / "nport_returns" / f"{eid}_monthly.csv")
+            b5 = b5[b5["rtn_pct"] != ""]
+
+            def pct(ids: list[str]) -> pd.Series:
+                return b5[b5["class_id"].isin(ids)].set_index("month")["rtn_pct"].astype(float)
+
+            r = resolved.loc[eid]
+            etf_ids = [c for c in r["etf_class_ids"].split(";") if c]
+            first_etf = nav[e.etf_successor].dropna().index[0].date()
+            s = nport_month_series(months, pct([r["class_id"]]), pct(etf_ids), mret[e.etf_successor], first_etf)
+            bad = sorted(set(s.loc[s["source"] == "missing", "month"]) - AKRE_GAP_MONTHS)
+            if bad:
+                failures.append(f"{eid}: monthly NAV return missing outside the accepted gap: {bad}")
+        else:
+            m = mret[e.nav_ticker]
+            s = pd.DataFrame(
+                [[str(p), m.get(p), "yfinance" if pd.notna(m.get(p)) else "missing"] for p in months],
+                columns=["month", "ret", "source"],
+            ).astype({"ret": "float64"})
+        out.append(s[s["source"] != "missing"].assign(entity=eid))
+    return pd.concat(out, ignore_index=True)[NAV_MONTHLY], failures
+
+
 def section_2(cfg) -> list[str]:
-    """SECURITY_MAP to data/processed/security_map.csv (step 2.2)."""
+    """SECURITY_MAP to data/processed/security_map.csv (step 2.2) and nav_monthly.csv (step 2.1b-2)."""
     smap = security_map_from_dir(ROOT / "data")
     write_csv(smap, PROCESSED / "security_map.csv")
-    return []
+    navm, failures = nav_monthly(cfg)
+    write_csv(navm, TABLES / "nav_monthly.csv")
+    return failures
 
 
 SECTIONS = {1: section_1, 2: section_2}

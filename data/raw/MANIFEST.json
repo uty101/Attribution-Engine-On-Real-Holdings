@@ -13,7 +13,7 @@
     "figi": "2026-10-02T21:10:16Z",
     "figi2": "2026-10-05T09:55:29Z",
     "french": "2026-10-02T21:15:47Z",
-    "navret": "2026-10-02T22:46:46Z",
+    "navret": "2026-10-05T10:05:37Z",
     "prices": "2026-10-05T10:04:43Z",
     "sec": "2026-10-05T10:00:41Z"
   },
@@ -569,6 +569,21 @@
       "form": "NPORT-P",
       "sha256": "cd3eae2f5d8fdb122ba24d66c47b5cd93bd4784cf9779ac2dfdca842baae79d9",
       "url": "https://www.sec.gov/Archives/edgar/data/811030/000089418925009200/primary_doc.xml"
+    },
+    "edgar/nport_returns/class_pages/C000013260.html": {
+      "form": "class page (HTML)",
+      "sha256": "8cdba0908348afd9e558fc9325f7085489e29de3ffb51109d1febc084e773439",
+      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=C000013260&type=NPORT-P&dateb=&owner=include&count=1"
+    },
+    "edgar/nport_returns/class_pages/C000080287.html": {
+      "form": "class page (HTML)",
+      "sha256": "a5c5ff9788ccd2e022a36f9ebef993232dd395c1015b0ad2b849394ef56a86ef",
+      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=C000080287&type=NPORT-P&dateb=&owner=include&count=1"
+    },
+    "edgar/nport_returns/class_pages/C000089998.html": {
+      "form": "class page (HTML)",
+      "sha256": "786738c70fcc93456fa57a7186e2d83cb05964d8c91067b65ce62be458d48644",
+      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=C000089998&type=NPORT-P&dateb=&owner=include&count=1"
     },
     "edgar/nport_returns/jensen/2019-11-30_0001145549-20-002337.xml": {
       "form": "NPORT-P",

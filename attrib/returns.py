@@ -16,6 +16,18 @@ def load_prices(data_dir: str | Path) -> pd.DataFrame:
 NAV_MONTHLY = ["entity", "month", "ret", "source"]
 
 
+def month_end_closes(prices: pd.DataFrame) -> pd.DataFrame:
+    """Convention 4.13: the last available adjusted close in each calendar month, per column,
+    indexed by `pd.Period(freq="M")`."""
+    return prices.groupby(prices.index.to_period("M")).last()
+
+
+def monthly_returns(prices: pd.DataFrame) -> pd.DataFrame:
+    """Calendar-month returns from month-end closes (Convention 4.13; instructions/02, C 2.4). The
+    first month of each column's series has no return, nor has a month after one with no close."""
+    return month_end_closes(prices).pct_change(fill_method=None)
+
+
 def nport_month_series(
     months: list[pd.Period],
     class_pct: pd.Series,
@@ -25,7 +37,7 @@ def nport_month_series(
 ) -> pd.DataFrame:
     """A fund's monthly NAV return chosen month by month (instructions/02b, step 2.1b):
 
-    1. `nport_class`: the N-PORT B.5 return of the fund's NAV class (`class_pct`, percent, by `YYYY-MM`);
+    1. `nport_b5`: the N-PORT B.5 return of the fund's NAV class (`class_pct`, percent, by `YYYY-MM`);
     2. `nport_etf_class`: else the B.5 return of an ETF class in the same series (`etf_class_pct`);
     3. `yfinance_etf`: else the ETF successor's yfinance month return (`etf_month_ret`, decimal, by
        `pd.Period`), for months whose first day is after `etf_first_date`;
@@ -37,7 +49,7 @@ def nport_month_series(
     for m in months:
         key = str(m)
         if key in class_pct.index and pd.notna(class_pct[key]):
-            rows.append([key, class_pct[key] / 100, "nport_class"])  # B.5 returns are in percent
+            rows.append([key, class_pct[key] / 100, "nport_b5"])  # B.5 returns are in percent
         elif key in etf_class_pct.index and pd.notna(etf_class_pct[key]):
             rows.append([key, etf_class_pct[key] / 100, "nport_etf_class"])
         elif m.start_time.date() > etf_first_date and m in etf_month_ret.index and pd.notna(etf_month_ret[m]):

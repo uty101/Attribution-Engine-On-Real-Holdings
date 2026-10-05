@@ -65,7 +65,7 @@ def test_akre_month_source_order():
     etf_month_ret = pd.Series({pd.Period("2025-10", freq="M"): 0.05, pd.Period("2025-11", freq="M"): 0.03})
     out = nport_month_series(months, class_pct, etf_class_pct, etf_month_ret, date(2025, 10, 27))
     print(out.to_string())
-    assert out["source"].tolist() == ["nport_class", "nport_etf_class", "missing", "yfinance_etf", "missing"]
+    assert out["source"].tolist() == ["nport_b5", "nport_etf_class", "missing", "yfinance_etf", "missing"]
     assert out["ret"].iloc[0] == 1.0 / 100
     assert out["ret"].iloc[1] == 2.0 / 100
     assert out["ret"].iloc[3] == 0.03
