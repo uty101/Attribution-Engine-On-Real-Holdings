@@ -1,0 +1,4 @@
+sec_id,id_type,status,result_rank,figi,composite_figi,ticker,name,exch_code,market_sector,security_type
+MINA00001,cusip,ok,1,BBGMINI1,BBGMINI1,MINA,MINI A CORP,US,Equity,Common Stock
+MINB00002,cusip,ok,1,BBGMINI2,BBGMINI2,MINB,MINI B INC,US,Equity,Common Stock
+MINC00003,cusip,ok,1,BBGMINI3,BBGMINI3,MINC,MINI C BANCORP,US,Equity,Common Stock

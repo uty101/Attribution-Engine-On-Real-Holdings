@@ -10,13 +10,17 @@ import io
 import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from attrib.linking import carino
 
 # instructions/07, C.1: A4 portrait, 2 cm margins, Helvetica 9 pt body, 8 pt tables, charts 17 cm wide
 MARGIN = 2 * cm
@@ -29,7 +33,7 @@ TITLE = ParagraphStyle("title", parent=BODY, fontName="Helvetica-Bold", fontSize
                        spaceAfter=8)
 
 EFFECTS = ["allocation", "selection", "interaction"]
-FACTOR_HEAD = {"mkt": "Mkt-RF", "smb": "SMB", "hml": "HML", "rmw": "RMW", "cma": "CMA", "umd": "UMD"}
+FACTOR_LABELS = {"mkt": "Mkt-RF", "smb": "SMB", "hml": "HML", "rmw": "RMW", "cma": "CMA", "umd": "UMD"}
 NO_NAV = "No NAV series was supplied, so the reconstruction check is skipped."
 LIMITS_HEAD = "What a 13F book cannot see."
 # instructions/07, C.1: the 13F limits paragraph, verbatim
@@ -44,6 +48,76 @@ LIMITS = (
     "they move nothing."
 )
 QUARTERS_PER_YEAR = 4  # annualising a compounded quarterly return: (1 + R)^(4 / T) - 1
+
+
+def _png(fig: Figure, dpi: int) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, metadata={"Software": None})
+    return buf.getvalue()
+
+
+def chart_1_png(name: str, bench: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, q_end: pd.Series,
+                zero_tol: float, dpi: int) -> bytes:
+    """Chart 1 (instructions/04, Section B; instructions/05, step 5.0): for each k, quarters 1 to k
+    linked with Carino; the Total allocation and Total selection against q_end of quarter k (`q_end`
+    by t), and the cumulative excess D_k = R_P,k - R_B,k with both compounded over quarters 1 to k,
+    all in percentage points. `eff` is the long Brinson layout (t, bucket, effects)."""
+    ks = sorted(rP.index)
+    pts = []
+    for k in ks:
+        sub = [t for t in ks if t <= k]
+        linked = carino(rP[sub], rB[sub], eff[eff["t"] <= k], zero_tol)
+        D = np.prod(1 + rP[sub].to_numpy()) - np.prod(1 + rB[sub].to_numpy())
+        pts.append([linked["allocation"].sum(), linked["selection"].sum(), D])
+    pts = 100 * np.array(pts)
+    x = pd.to_datetime(q_end.loc[ks])
+    fig = Figure(figsize=(8, 4.5))
+    ax = fig.subplots()
+    ax.axhline(0, color="0.5", linewidth=0.8)
+    ax.plot(x, pts[:, 0], label="Allocation", color="#1f77b4", linewidth=1.8)
+    ax.plot(x, pts[:, 1], label="Selection", color="#d62728", linewidth=1.8)
+    ax.plot(x, pts[:, 2], label="Total excess (D)", color="black", linestyle="--", linewidth=1.8)
+    ax.set_ylabel("Percentage points of cumulative return")
+    ax.legend(loc="best", frameon=False)
+    fig.suptitle(f"{name} vs {bench}: cumulative allocation and selection (Carino)")
+    ax.set_title("Interaction is excluded from the chart and shown in Table 1.", fontsize=9)
+    fig.tight_layout()
+    return _png(fig, dpi)
+
+
+def chart_2_png(name: str, rb: pd.DataFrame, factors: list[str], window: int, dpi: int) -> bytes:
+    """Chart 2 (instructions/05, Section C): the rolling book betas of `factors` against window end."""
+    x = rb.index.to_timestamp(how="end").normalize()
+    fig = Figure(figsize=(8, 4.5))
+    ax = fig.subplots()
+    ax.axhline(0, color="0.5", linewidth=0.8)
+    for f in factors:
+        ax.plot(x, rb[f].to_numpy(), label=FACTOR_LABELS[f], linewidth=1.6)
+    ax.set_ylabel("Beta")
+    ax.legend(loc="best", frameon=False, ncol=3)
+    ax.set_title(f"{name}: rolling {window}-month factor betas (book)")
+    fig.tight_layout()
+    return _png(fig, dpi)
+
+
+def chart_3_png(name: str, bench: str, dec: pd.DataFrame, te: float, h: str, n: int, dpi: int) -> bytes:
+    """Chart 3 (instructions/06, C): the `n` largest CTE positions at h by |CTE|, as horizontal bars
+    in percentage points of annualised TE, sorted by CTE with the largest at the top, positive and
+    negative in 2 colours, with a vertical zero line."""
+    top = dec.assign(_abs=dec["cte"].abs()).sort_values(["_abs", "ticker"], ascending=[False, True],
+                                                         kind="mergesort").head(n)
+    top = top.sort_values(["cte", "ticker"], ascending=[True, False], kind="mergesort")  # barh draws bottom-up
+    share = float(top["cte"].sum()) / te
+    fig = Figure(figsize=(8, 6))
+    ax = fig.subplots()
+    vals = 100 * top["cte"].to_numpy()
+    ax.barh(top["ticker"], vals, color=np.where(vals >= 0, "#d62728", "#1f77b4"))
+    ax.axvline(0, color="0.3", linewidth=0.8)
+    ax.set_xlabel("Contribution to ex-ante tracking error (percentage points, annualised)")
+    fig.suptitle(f"{name} vs {bench}: top {n} contributions to ex-ante tracking error, {h}")
+    ax.set_title(f"Ex-ante TE {100 * te:.2f}%; these {n} positions explain {100 * share:.1f}% of it", fontsize=9)
+    fig.tight_layout()
+    return _png(fig, dpi)
 
 
 def num(x) -> str:
@@ -140,7 +214,7 @@ def _page_1(fund_id: str, res: dict) -> list:
 def _page_2(fund_id: str, res: dict) -> list:
     fy = res["factor_by_year"]
     fy = fy[fy["series_id"] == f"{fund_id}_book"]  # D-23: the book series
-    factors = list(FACTOR_HEAD)
+    factors = list(FACTOR_LABELS)
     rows = [[str(int(r["year"])), str(int(r["n_months"])), pct(r["excess_return"]), *[pct(r[f]) for f in factors],
              pct(r["alpha"]), pct(r["residual"])] for _, r in fy.iterrows()]
     fit = res["factor_fit"]
@@ -149,7 +223,7 @@ def _page_2(fund_id: str, res: dict) -> list:
     return [
         Paragraph("Table 2. Factor attribution of the fund book's monthly excess return by calendar year, with "
                   "full-sample betas, in percent.", CAPTION),
-        _table(["Year", "Months", "Excess", *FACTOR_HEAD.values(), "Alpha", "Residual"], rows),
+        _table(["Year", "Months", "Excess", *FACTOR_LABELS.values(), "Alpha", "Residual"], rows),
         Spacer(1, 4),
         Paragraph(f"Full sample of {int(a['n_months'])} months: alpha {pct(a['value'])}% a month, HAC t "
                   f"{num(a['t_hac'])}, R² {num(a['r2'])}.", BODY),

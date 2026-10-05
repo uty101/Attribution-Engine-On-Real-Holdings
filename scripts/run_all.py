@@ -52,6 +52,7 @@ from attrib.edgar import (  # noqa: E402
 from attrib.mapping import security_map_from_dir  # noqa: E402
 from attrib.bootstrap import bootstrap_mean  # noqa: E402
 from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
+from attrib.report import FACTOR_LABELS, chart_1_png, chart_2_png, chart_3_png  # noqa: E402
 from attrib.risk import (  # noqa: E402
     DAILY_TO_MONTHLY,
     MONTHS_PER_YEAR,
@@ -447,34 +448,16 @@ def fund_label(cfg, fund: str) -> tuple[str, str]:
     return fund.capitalize(), cfg.entities[cfg.entities[fund].benchmark].etf_ticker
 
 
-def chart_1(cfg, fund: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, cal: pd.DataFrame, path: Path) -> None:
-    """Chart 1 (instructions/04, Section B; instructions/05, step 5.0): for each k, quarters 1 to k
-    linked with Carino; the Total allocation and Total selection against q_end of quarter k, and
-    the cumulative excess D_k = R_P,k - R_B,k with both compounded over quarters 1 to k, all in
-    percentage points."""
-    ks = sorted(rP.index)
-    pts = []
-    for k in ks:
-        sub = [t for t in ks if t <= k]
-        linked = carino(rP[sub], rB[sub], eff[eff["t"] <= k], cfg.linking.zero_tol)
-        D = np.prod(1 + rP[sub].to_numpy()) - np.prod(1 + rB[sub].to_numpy())
-        pts.append([linked["allocation"].sum(), linked["selection"].sum(), D])
-    pts = 100 * np.array(pts)
-    x = pd.to_datetime(cal.set_index("t").loc[ks, "q_end"])
-    name, bench = fund_label(cfg, fund)
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.axhline(0, color="0.5", linewidth=0.8)
-    ax.plot(x, pts[:, 0], label="Allocation", color="#1f77b4", linewidth=1.8)
-    ax.plot(x, pts[:, 1], label="Selection", color="#d62728", linewidth=1.8)
-    ax.plot(x, pts[:, 2], label="Total excess (D)", color="black", linestyle="--", linewidth=1.8)
-    ax.set_ylabel("Percentage points of cumulative return")
-    ax.legend(loc="best", frameon=False)
-    fig.suptitle(f"{name} vs {bench}: cumulative allocation and selection (Carino)")
-    ax.set_title("Interaction is excluded from the chart and shown in Table 1.", fontsize=9)
-    fig.tight_layout()
+def write_png(png: bytes, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
-    plt.close(fig)
+    path.write_bytes(png)
+
+
+def chart_1(cfg, fund: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, cal: pd.DataFrame, path: Path) -> None:
+    """Chart 1 to `path`, rendered by `attrib.report.chart_1_png` (step 7.2 moved it there)."""
+    name, bench = fund_label(cfg, fund)
+    write_png(chart_1_png(name, bench, rP, rB, eff, cal.set_index("t")["q_end"], cfg.linking.zero_tol,
+                          cfg.report.dpi), path)
 
 
 def section_4(cfg) -> list[str]:
@@ -552,7 +535,6 @@ FIT_COLS = ["value", "se_hac", "t_hac"]
 FACTOR_BY_YEAR = ["series_id", "year", "n_months", "excess_return", "mkt", "smb", "hml", "rmw", "cma", "umd", ALPHA,
                   "residual", "r2_full"]
 YEAR_TOL = 1e-12  # instructions/05, D 5.1: year rows sum to the year's excess return
-FACTOR_LABELS = {"mkt": "Mkt-RF", "smb": "SMB", "hml": "HML", "rmw": "RMW", "cma": "CMA", "umd": "UMD"}
 
 
 def factor_months(cfg, ff: pd.DataFrame) -> pd.PeriodIndex:
@@ -585,19 +567,9 @@ def monthly_series(cfg, months: pd.PeriodIndex) -> dict[str, tuple[str, pd.Serie
 
 
 def chart_2(cfg, fund: str, rb: pd.DataFrame, path: Path) -> None:
-    """Chart 2 (instructions/05, Section C): the 6 rolling book betas against window end."""
-    x = rb.index.to_timestamp(how="end").normalize()
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.axhline(0, color="0.5", linewidth=0.8)
-    for f in cfg.factors.names:
-        ax.plot(x, rb[f].to_numpy(), label=FACTOR_LABELS[f], linewidth=1.6)
-    ax.set_ylabel("Beta")
-    ax.legend(loc="best", frameon=False, ncol=3)
-    ax.set_title(f"{fund.capitalize()}: rolling {cfg.factors.rolling_window}-month factor betas (book)")
-    fig.tight_layout()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
-    plt.close(fig)
+    """Chart 2 to `path`, rendered by `attrib.report.chart_2_png` (step 7.2 moved it there)."""
+    write_png(chart_2_png(fund.capitalize(), rb, list(cfg.factors.names), cfg.factors.rolling_window,
+                          cfg.report.dpi), path)
 
 
 HOLDINGS_EXPOSURES = ["fund", "holdings_date", "side", "mkt", "smb", "hml", "rmw", "cma", "umd", "excluded_weight"]
@@ -753,26 +725,9 @@ EULER_TOL = 1e-12  # kickoff 5.10: sum CTE = TE
 
 
 def chart_3(cfg, fund: str, dec: pd.DataFrame, te: float, h: str, path: Path) -> None:
-    """Chart 3 (instructions/06, C): the `risk.top_n_positions` largest CTE positions at h by |CTE|,
-    as horizontal bars in percentage points of annualised TE, sorted by CTE with the largest at
-    the top, positive and negative in 2 colours, with a vertical zero line."""
-    n = cfg.risk.top_n_positions
-    top = dec.assign(_abs=dec["cte"].abs()).sort_values(["_abs", "ticker"], ascending=[False, True],
-                                                         kind="mergesort").head(n)
-    top = top.sort_values(["cte", "ticker"], ascending=[True, False], kind="mergesort")  # barh draws bottom-up
-    share = float(top["cte"].sum()) / te
+    """Chart 3 to `path`, rendered by `attrib.report.chart_3_png` (step 7.2 moved it there)."""
     name, bench = fund_label(cfg, fund)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    vals = 100 * top["cte"].to_numpy()
-    ax.barh(top["ticker"], vals, color=np.where(vals >= 0, "#d62728", "#1f77b4"))
-    ax.axvline(0, color="0.3", linewidth=0.8)
-    ax.set_xlabel("Contribution to ex-ante tracking error (percentage points, annualised)")
-    fig.suptitle(f"{name} vs {bench}: top {n} contributions to ex-ante tracking error, {h}")
-    ax.set_title(f"Ex-ante TE {100 * te:.2f}%; these {n} positions explain {100 * share:.1f}% of it", fontsize=9)
-    fig.tight_layout()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
-    plt.close(fig)
+    write_png(chart_3_png(name, bench, dec, te, h, cfg.risk.top_n_positions, cfg.report.dpi), path)
 
 
 def realised_te(cfg, funds: list[str], risk_q: pd.DataFrame) -> pd.DataFrame:

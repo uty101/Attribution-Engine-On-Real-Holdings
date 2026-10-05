@@ -1,0 +1,17 @@
+{
+  "0": {
+    "cik_str": 9000001,
+    "ticker": "MINA",
+    "title": "MINI A CORP"
+  },
+  "1": {
+    "cik_str": 9000002,
+    "ticker": "MINB",
+    "title": "MINI B INC"
+  },
+  "2": {
+    "cik_str": 9000003,
+    "ticker": "MINC",
+    "title": "MINI C BANCORP"
+  }
+}
