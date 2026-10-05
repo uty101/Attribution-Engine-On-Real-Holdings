@@ -46,17 +46,20 @@ def returns_based(excess: pd.Series, factors: pd.DataFrame, maxlags: int) -> dic
     exact call of instructions/05, Section C, on the months with no missing value.
 
     D-24 B: keys value, se_hac, t_hac (Series indexed alpha, then the factors), r2, resid_vol_ann
-    (std(resid), ddof 1, x sqrt(12)), n_months, and resid (Series indexed by month).
+    (the regression standard error sqrt(SSR / (n - k)), k the parameter count with the constant,
+    x sqrt(12)), n_months, and resid (Series indexed by month).
     """
     y, X = _aligned(excess, factors)
     fit = sm.OLS(y, sm.add_constant(X)).fit(cov_type="HAC", cov_kwds={"maxlags": maxlags})
     names = {"const": ALPHA}
+    n, k = len(y), len(fit.params)
     return {
         "value": fit.params.rename(index=names),
         "se_hac": fit.bse.rename(index=names),
         "t_hac": fit.tvalues.rename(index=names),
         "r2": float(fit.rsquared),
-        "resid_vol_ann": float(fit.resid.std(ddof=1) * np.sqrt(12)),  # kickoff 5.7: std(resid) x sqrt(12)
+        # instructions/06, A answer 3: SSR / (n - 7) for 6 factors and the constant, x sqrt(12) (kickoff 5.7)
+        "resid_vol_ann": float(np.sqrt(np.sum(fit.resid.to_numpy() ** 2) / (n - k)) * np.sqrt(12)),
         "n_months": int(fit.nobs),
         "resid": fit.resid.rename("resid"),
     }
