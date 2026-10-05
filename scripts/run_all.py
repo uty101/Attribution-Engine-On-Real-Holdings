@@ -777,14 +777,14 @@ def chart_3(cfg, fund: str, dec: pd.DataFrame, te: float, h: str, path: Path) ->
 
 def realised_te(cfg, funds: list[str], risk_q: pd.DataFrame) -> pd.DataFrame:
     """D-25 (instructions/06, C): per fund, std (ddof 1) of the monthly book active return (fund
-    book minus its benchmark book) x sqrt(months_per_year) over the 83 months of the Section 5
-    monthly sample (`factor_months`), the mean of the ex-ante TEs and n_months."""
-    months = factor_months(cfg, load_french(ROOT / "data"))
+    book minus its benchmark book) x sqrt(months_per_year) over every month of book_monthly.csv,
+    October 2019 to September 2026 (instructions/07, A answer 2: realised TE needs no factor
+    data), the mean of the ex-ante TEs and n_months."""
     book = read_str_csv(TABLES / "book_monthly.csv").astype({"ret": float})
     rows = []
     for fund in funds:
         r = {e: book[book["entity"] == e].set_index("month")["ret"] for e in (fund, cfg.entities[fund].benchmark)}
-        act = (r[fund] - r[cfg.entities[fund].benchmark]).reindex(months.astype(str)).dropna()
+        act = (r[fund] - r[cfg.entities[fund].benchmark]).dropna()
         te_ex = risk_q.loc[risk_q["fund"] == fund, "te_exante"]
         rows.append([fund, float(act.std(ddof=1) * np.sqrt(cfg.risk.months_per_year)), float(te_ex.mean()), len(act)])
     return pd.DataFrame(rows, columns=TE_REALISED)
