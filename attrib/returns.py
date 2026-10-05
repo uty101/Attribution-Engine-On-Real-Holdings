@@ -63,3 +63,34 @@ def load_nav(data_dir: str | Path) -> pd.DataFrame:
     """data/raw/prices/nav_adjclose.csv: adjusted closes of the NAV and ETF tickers, index `date`."""
     df = pd.read_csv(Path(data_dir) / "raw" / "prices" / "nav_adjclose.csv", index_col="date", parse_dates=["date"])
     return df.astype("float64")
+
+
+QUARTERS = ["t", "holdings_date", "q_start", "q_end"]
+
+
+def _next_quarter_end(d: date) -> date:
+    """The next calendar quarter end after the quarter end `d`."""
+    return (pd.Timestamp(d) + pd.offsets.QuarterEnd(1)).date()
+
+
+def q(price_index: pd.DatetimeIndex, d: date) -> pd.Timestamp:
+    """Kickoff 3.3: the last date <= d in `price_index` (the IVV price index)."""
+    idx = price_index[price_index <= pd.Timestamp(d)]
+    if idx.empty:
+        raise ValueError(f"no price date on or before {d}")
+    return idx.max()
+
+
+def quarter_calendar(price_index: pd.DatetimeIndex, dates: list[date]) -> pd.DataFrame:
+    """QUARTERS: t from 1, holdings_date h_t, q_start = q(h_t), q_end = q(next calendar quarter end)
+    (kickoff 3.3; instructions/02, C 2.4)."""
+    idx = pd.DatetimeIndex(price_index).sort_values()
+    rows = [[t, d, q(idx, d), q(idx, _next_quarter_end(d))] for t, d in enumerate(sorted(dates), start=1)]
+    return pd.DataFrame(rows, columns=QUARTERS)
+
+
+def daily_returns(prices: pd.DataFrame) -> pd.DataFrame:
+    """Daily simple returns per column, each from the previous available close of that column.
+    A date with no close has no return; the first close of each column has none."""
+    out = {c: prices[c].dropna().pct_change() for c in prices.columns}
+    return pd.DataFrame(out, index=prices.index)[list(prices.columns)]
