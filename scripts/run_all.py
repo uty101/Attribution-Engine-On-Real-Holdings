@@ -12,12 +12,20 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import matplotlib
+import numpy as np
 import pandas as pd
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+from pc.stats import stationary_bootstrap_indices  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from attrib.brinson import EFFECTS, brinson_fachler, fill_empty  # noqa: E402
 from attrib.config import load_config  # noqa: E402
+from attrib.linking import carino, menchero  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     aggregate_book,
     equity_rows_13f,
@@ -35,6 +43,7 @@ from attrib.bootstrap import bootstrap_mean  # noqa: E402
 from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
 from attrib.returns import (  # noqa: E402
     BOOK_MONTHLY,
+    BUCKETS_ORDER,
     BOOK_QUARTERLY,
     NAV_MONTHLY,
     apply_return_overrides,
@@ -54,6 +63,7 @@ from attrib.returns import (  # noqa: E402
 RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
 TABLES = ROOT / "outputs" / "tables"
+FIGURES = ROOT / "outputs" / "figures"
 
 COVERAGE = [
     "entity", "period_date", "filing_date", "lag_days", "n_rows_raw", "n_rows_kept", "dropped_value_usd",
@@ -401,7 +411,113 @@ def section_3(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1, 2: section_2, 3: section_3}
+BRINSON_QUARTERLY = ["fund", "t", "bucket", "wP", "wB", "rP", "rB", *EFFECTS]
+LINKED = ["fund", "method", "bucket", *EFFECTS, "total"]
+LINK_METHODS = {"carino": carino, "menchero": menchero}
+SERIES_ORDER = [*EFFECTS, "gap"]  # kickoff 6.2, bootstrap.csv
+IDENTITY_TOL = 1e-10  # kickoff 5.5 and 5.6, real data
+
+
+def fund_label(cfg, fund: str) -> tuple[str, str]:
+    """(fund, benchmark) as named on Chart 1: the fund id capitalised and the benchmark's ETF ticker."""
+    return fund.capitalize(), cfg.entities[cfg.entities[fund].benchmark].etf_ticker
+
+
+def chart_1(cfg, fund: str, rP: pd.Series, rB: pd.Series, eff: pd.DataFrame, cal: pd.DataFrame, path: Path) -> None:
+    """Chart 1 (instructions/04, Section B): for each k, quarters 1 to k linked with Carino; the
+    Total allocation and Total selection in percent against q_end of quarter k."""
+    ks = sorted(rP.index)
+    pts = []
+    for k in ks:
+        sub = [t for t in ks if t <= k]
+        linked = carino(rP[sub], rB[sub], eff[eff["t"] <= k], cfg.linking.zero_tol)
+        pts.append([linked["allocation"].sum(), linked["selection"].sum()])
+    pts = 100 * np.array(pts)
+    x = pd.to_datetime(cal.set_index("t").loc[ks, "q_end"])
+    name, bench = fund_label(cfg, fund)
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.axhline(0, color="0.5", linewidth=0.8)
+    ax.plot(x, pts[:, 0], label="Allocation", color="#1f77b4", linewidth=1.8)
+    ax.plot(x, pts[:, 1], label="Selection", color="#d62728", linewidth=1.8)
+    ax.set_ylabel("Cumulative linked effect (%)")
+    ax.legend(loc="best", frameon=False)
+    fig.suptitle(f"{name} vs {bench}: cumulative allocation and selection (Carino)")
+    ax.set_title("Interaction is excluded from the chart and shown in Table 1.", fontsize=9)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=cfg.report.dpi, metadata={"Software": None})
+    plt.close(fig)
+
+
+def section_4(cfg) -> list[str]:
+    """Steps 4.1 to 4.3 for every fund that passed the gate: brinson_quarterly.csv, linked.csv,
+    the allocation, selection and interaction rows of bootstrap.csv, and Chart 1. Inputs are
+    buckets.csv and book_quarterly.csv only (instructions/04, Section B)."""
+    failures: list[str] = []
+    buckets = read_str_csv(TABLES / "buckets.csv").replace("", np.nan).astype({"t": int, "weight": float, "r": float})
+    book_q = read_str_csv(TABLES / "book_quarterly.csv").astype({"t": int, "book_return": float})
+    gate_df = read_str_csv(TABLES / "gate.csv").set_index("fund")
+    ivv = load_nav(ROOT / "data")[cfg.entities["ivv"].etf_ticker].dropna().index
+    cal = quarter_calendar(ivv, holdings_dates(cfg))
+    b = cfg.bootstrap
+
+    def side(eid: str, t: int) -> tuple[pd.Series, pd.Series]:
+        g = buckets[(buckets["entity"] == eid) & (buckets["t"] == t)].set_index("bucket").reindex(BUCKETS_ORDER)
+        return g["weight"], g["r"]
+
+    def book_r(eid: str) -> pd.Series:
+        return book_q[book_q["entity"] == eid].set_index("t")["book_return"]
+
+    bq, linked_rows, boot = [], [], []
+    for fund, e in cfg.entities.items():
+        if e.type != "fund":
+            continue
+        if gate_df.at[fund, "pass"] != "True":  # Convention 4.19
+            print(f"{fund}: excluded from Section 4, it failed the NAV gate (corr {gate_df.at[fund, 'corr']})")
+            continue
+        rP, rB = book_r(fund), book_r(e.benchmark)
+        eff = []
+        for t in cal["t"]:
+            wP, sP = side(fund, t)
+            wB, sB = side(e.benchmark, t)
+            ef = brinson_fachler(wP, sP, wB, sB)
+            fP, fB, _ = fill_empty(wP, sP, wB, sB)
+            err = abs(float(ef.to_numpy().sum()) - (rP[t] - rB[t]))
+            if err >= IDENTITY_TOL:
+                failures.append(f"{fund} t={t}: Brinson identity misses by {err!r}")
+            bq.append(pd.DataFrame({"fund": fund, "t": t, "bucket": BUCKETS_ORDER, "wP": wP.to_numpy(),
+                                    "wB": wB.to_numpy(), "rP": fP.to_numpy(), "rB": fB.to_numpy(),
+                                    **{c: ef[c].to_numpy() for c in EFFECTS}}))
+            eff.append(ef.reset_index().assign(t=t))
+        eff = pd.concat(eff, ignore_index=True)[["t", "bucket", *EFFECTS]]
+        D = float(np.prod(1 + rP.to_numpy()) - np.prod(1 + rB.to_numpy()))
+        for method, f in LINK_METHODS.items():
+            lk = f(rP, rB, eff, cfg.linking.zero_tol)
+            lk = pd.concat([lk, pd.DataFrame([["Total", *lk[EFFECTS].sum()]], columns=lk.columns)], ignore_index=True)
+            lk["total"] = lk[EFFECTS].sum(axis=1)
+            err = abs(float(lk["total"].iloc[-1]) - D)
+            if err >= IDENTITY_TOL:
+                failures.append(f"{fund} {method}: linked total misses D by {err!r}")
+            linked_rows.append(lk.assign(fund=fund, method=method)[LINKED])
+        tot = eff.groupby("t")[EFFECTS].sum()  # quarterly totals over buckets, unlinked
+        idx = stationary_bootstrap_indices(len(tot), b.mean_block, b.reps, cfg.run.bootstrap_seed)
+        for s in EFFECTS:
+            boot.append([fund, s, *bootstrap_mean(tot[s].to_numpy(), b.mean_block, b.reps, cfg.run.bootstrap_seed,
+                                                  b.lo, b.hi, idx=idx)])
+        chart_1(cfg, fund, rP, rB, eff, cal, FIGURES / f"{fund}_alloc_vs_sel.png")
+    write_csv(pd.concat(bq, ignore_index=True)[BRINSON_QUARTERLY], TABLES / "brinson_quarterly.csv")
+    write_csv(pd.concat(linked_rows, ignore_index=True), TABLES / "linked.csv")
+
+    gap = read_str_csv(TABLES / "bootstrap.csv")
+    gap = gap[gap["series"] == "gap"].astype({c: float for c in BOOTSTRAP[2:]})
+    out = pd.concat([pd.DataFrame(boot, columns=BOOTSTRAP), gap], ignore_index=True)
+    order = {f: i for i, f in enumerate(cfg.entities)}
+    out = out.assign(_f=out["fund"].map(order), _s=out["series"].map(SERIES_ORDER.index))
+    write_csv(out.sort_values(["_f", "_s"], kind="mergesort")[BOOTSTRAP], TABLES / "bootstrap.csv")
+    return failures
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4}
 
 
 def main() -> None:
