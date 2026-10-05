@@ -31,6 +31,7 @@ from attrib.edgar import (  # noqa: E402
     units_check,
 )
 from attrib.mapping import security_map_from_dir  # noqa: E402
+from attrib.reconstruction import reconstruction_table  # noqa: E402
 from attrib.returns import (  # noqa: E402
     BOOK_MONTHLY,
     BOOK_QUARTERLY,
@@ -351,10 +352,37 @@ def book_returns(cfg) -> dict:
     return {"cal": cal, "book_q": book_q}
 
 
+def benchmark_nav_monthly(cfg) -> pd.DataFrame:
+    """Calendar-month returns of each benchmark's ETF (Convention 4.14), as entity, month, ret."""
+    mret = monthly_returns(load_nav(ROOT / "data"))
+    out = [
+        pd.DataFrame({"entity": eid, "month": mret.index.astype(str), "ret": mret[e.etf_ticker].to_numpy()})
+        for eid, e in cfg.entities.items() if e.type == "benchmark"
+    ]
+    return pd.concat(out, ignore_index=True).dropna(subset=["ret"])
+
+
+def benchmark_check(cfg, table4: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
+    """Step 3.3 as amended by instructions/03: stop under rule 4 if any benchmark |gap| exceeds
+    `gates.benchmark_gap_stop`; the quarters above `gates.benchmark_gap_max` are listed, not stopped on."""
+    bench = table4[table4["entity"].isin([k for k, e in cfg.entities.items() if e.type == "benchmark"])]
+    stop = bench[bench["gap"].abs() > cfg.gates.benchmark_gap_stop]
+    failures = [f"{r.entity} t={r.t}: |gap| {abs(r.gap)!r} > benchmark_gap_stop" for r in stop.itertuples()]
+    return failures, bench[bench["gap"].abs() > cfg.gates.benchmark_gap_max]
+
+
 def section_3(cfg) -> list[str]:
-    """Book returns (step 3.2)."""
-    book_returns(cfg)
-    return []
+    """Book returns (step 3.2), then the benchmark check (step 3.3)."""
+    res = book_returns(cfg)
+    book_q, cal = res["book_q"], res["cal"]
+    bench = book_q[book_q["entity"].isin([k for k, e in cfg.entities.items() if e.type == "benchmark"])]
+    table4 = reconstruction_table(bench, benchmark_nav_monthly(cfg), cal)
+    failures, above = benchmark_check(cfg, table4)
+    if not above.empty:
+        print(f"benchmark quarters with |gap| > benchmark_gap_max ({cfg.gates.benchmark_gap_max}):")
+        print(above.merge(book_q, on=["entity", "t", "book_return"]).to_string())
+    write_csv(table4, TABLES / "reconstruction.csv")
+    return failures
 
 
 SECTIONS = {1: section_1, 2: section_2, 3: section_3}

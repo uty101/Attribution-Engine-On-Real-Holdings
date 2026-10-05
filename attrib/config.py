@@ -57,6 +57,7 @@ class OpenFigi:
 class Gates:
     fund_nav_corr_min: float
     benchmark_gap_max: float
+    benchmark_gap_stop: float
 
 
 @dataclass(frozen=True)

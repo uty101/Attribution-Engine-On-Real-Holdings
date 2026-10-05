@@ -47,6 +47,7 @@ SPEC_KEYS = {
     "openfigi.min_interval_with_key_s",
     "gates.fund_nav_corr_min",
     "gates.benchmark_gap_max",
+    "gates.benchmark_gap_stop",
     "linking.zero_tol",
     "factors.names",
     "factors.hac_maxlags",

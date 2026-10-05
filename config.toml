@@ -52,6 +52,7 @@ min_interval_with_key_s = 0.24
 [gates]
 fund_nav_corr_min = 0.90
 benchmark_gap_max = 0.01
+benchmark_gap_stop = 0.03
 
 [linking]
 zero_tol = 1e-12
