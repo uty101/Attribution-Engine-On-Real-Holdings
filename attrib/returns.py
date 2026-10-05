@@ -94,3 +94,60 @@ def daily_returns(prices: pd.DataFrame) -> pd.DataFrame:
     A date with no close has no return; the first close of each column has none."""
     out = {c: prices[c].dropna().pct_change() for c in prices.columns}
     return pd.DataFrame(out, index=prices.index)[list(prices.columns)]
+
+
+# Kickoff 6.2 with `sec_id` after `cusip`: ISIN-only rows have no CUSIP (amendment 8)
+POSITION_RETURNS = [
+    "entity", "t", "cusip", "sec_id", "issuer6", "ticker", "bucket", "weight", "r", "delisted_in_quarter",
+    "last_price_date",
+]
+NEUTRAL = ("Unmapped", "Unpriced")
+
+
+
+def _neutral(pos: pd.DataFrame) -> pd.DataFrame:
+    """Convention 4.9: Unmapped and Unpriced rows earn the priced, mapped return of their book."""
+    pm = ~pos["bucket"].isin(NEUTRAL)
+    if not pm.any():
+        raise ValueError("a book has no priced, mapped position, so its neutral return is undefined")
+    w = pos.loc[pm, "weight"]
+    pos = pos.copy()
+    pos.loc[~pm, "r"] = float((w * pos.loc[pm, "r"]).sum() / w.sum())
+    return pos
+
+
+def return_overrides_with_t(overrides: pd.DataFrame, cal: pd.DataFrame) -> pd.DataFrame:
+    """The `quarter_return` rows of overrides.csv with `t` added: `period_date` is the holdings
+    date h_t of the return quarter (QUARTERS)."""
+    ov = overrides.fillna("").astype(str)
+    ov = ov[ov["kind"] == "quarter_return"].copy()
+    t_of = {str(h): t for t, h in zip(cal["t"], cal["holdings_date"])}
+    bad = sorted(set(ov["period_date"]) - set(t_of))
+    if bad:
+        raise ValueError(f"quarter_return period_date not a holdings date: {bad}")
+    ov["t"] = [t_of[p] for p in ov["period_date"]]
+    return ov
+
+
+def apply_return_overrides(pos: pd.DataFrame, overrides: pd.DataFrame) -> pd.DataFrame:
+    """D-16 (instructions/01, B OPEN-16): applied after `book_quarter`, before `bucket_table`.
+
+    Every `quarter_return` row of `overrides` (with `t`, from `return_overrides_with_t`) sets `r`
+    to `value` on the POSITION_RETURNS rows with its sec_id and t, in every entity. The Unmapped
+    and Unpriced rows of a changed book then take the book's new priced, mapped return
+    (Convention 4.9). An override naming an Unmapped or Unpriced row raises: that row has no
+    return of its own to replace.
+    """
+    ov = overrides[overrides["kind"] == "quarter_return"]
+    if ov.empty:
+        return pos
+    out = pos.copy()
+    changed = set()
+    for sid, t, value in zip(ov["sec_id"], ov["t"], ov["value"]):
+        hit = (out["sec_id"] == sid) & (out["t"] == int(t))
+        if out.loc[hit, "bucket"].isin(NEUTRAL).any():
+            raise ValueError(f"quarter_return override for {sid} t={t} names an Unmapped or Unpriced row")
+        out.loc[hit, "r"] = float(value)
+        changed |= set(zip(out.loc[hit, "entity"], out.loc[hit, "t"]))
+    parts = [_neutral(g) if k in changed else g for k, g in out.groupby(["entity", "t"], sort=False)]
+    return pd.concat(parts).loc[out.index, POSITION_RETURNS]
