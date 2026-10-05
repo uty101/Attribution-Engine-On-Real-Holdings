@@ -31,7 +31,15 @@ from attrib.edgar import (  # noqa: E402
     units_check,
 )
 from attrib.mapping import security_map_from_dir  # noqa: E402
-from attrib.returns import NAV_MONTHLY, load_nav, monthly_returns, nport_month_series  # noqa: E402
+from attrib.returns import (  # noqa: E402
+    NAV_MONTHLY,
+    daily_returns,
+    load_nav,
+    load_prices,
+    monthly_returns,
+    nport_month_series,
+    quarter_calendar,
+)
 
 RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
@@ -211,12 +219,95 @@ def nav_monthly(cfg) -> tuple[pd.DataFrame, list[str]]:
     return pd.concat(out, ignore_index=True)[NAV_MONTHLY], failures
 
 
+# kickoff 8 step 2.5, instructions/02 C 2.5 and 02b C 2.5: list lengths and the large-move threshold
+UNMAPPED_TOP_N = 60
+UNPRICED_TOP_N = 20
+NOCIK_TOP_N = 40
+LARGE_MOVE_ABS = 0.25  # daily |return| > 25%
+MAPPING_WEIGHTS = ["unmapped_weight", "unpriced_weight", "other_nosic_weight"]
+
+
+def _top(rows: pd.DataFrame, n: int, cols: list[str]) -> pd.DataFrame:
+    """Per sec_id: the largest weight, the entity and name at it, and every period in `rows`,
+    semicolon-joined; the `n` largest by max_weight (ties by sec_id)."""
+    if rows.empty:
+        return pd.DataFrame(columns=cols)
+    r = rows.sort_values(["sec_id", "weight", "entity", "period_date"], ascending=[True, False, True, True],
+                         kind="mergesort")
+    first = r.drop_duplicates("sec_id").set_index("sec_id")
+    periods = rows.groupby("sec_id")["period_date"].agg(lambda s: ";".join(sorted(set(s))))
+    out = first.assign(max_weight=first["weight"], entity_of_max=first["entity"], periods=periods).reset_index()
+    out = out.sort_values(["max_weight", "sec_id"], ascending=[False, True], kind="mergesort").head(n)
+    return out[cols].reset_index(drop=True)
+
+
+def mapping_coverage(cfg, smap: pd.DataFrame) -> None:
+    """Step 2.5: the mapping columns of coverage.csv, unmapped_top.csv, unpriced_top.csv,
+    nocik_top.csv and large_moves.csv. Weights per Convention 4.5, by sec_id."""
+    prices = load_prices(ROOT / "data")
+    ivv = load_nav(ROOT / "data")[cfg.entities["ivv"].etf_ticker].dropna().index
+    cal = quarter_calendar(ivv, holdings_dates(cfg))
+    q_start = {str(h): qs for h, qs in zip(cal["holdings_date"], cal["q_start"])}
+
+    books = pd.concat(
+        [read_str_csv(PROCESSED / f"holdings_{eid}.csv") for eid in cfg.entities], ignore_index=True
+    ).astype({"value_usd": float})
+    books["weight"] = books["value_usd"] / books.groupby(["entity", "period_date"])["value_usd"].transform("sum")
+    books = books.join(smap.set_index("sec_id")[["id_type", "ticker", "yf_ticker", "map_status"]], on="sec_id")
+
+    def priced(r) -> bool:
+        """instructions/02, B: an adjusted close on the exact q_start of the book's return quarter."""
+        d, t = q_start[r["period_date"]], r["yf_ticker"]
+        return t in prices.columns and d in prices.index and pd.notna(prices.at[d, t])
+
+    has_ticker = books["map_status"] != "no_match"
+    books["priced"] = False
+    books.loc[has_ticker, "priced"] = books[has_ticker].apply(priced, axis=1)
+    flags = {
+        "unmapped_weight": books["map_status"] == "no_match",
+        "unpriced_weight": has_ticker & ~books["priced"],
+        "other_nosic_weight": books["map_status"].isin(["no_cik", "no_sic"]),
+    }
+    w = pd.DataFrame({k: books["weight"] * v for k, v in flags.items()})
+    w = w.join(books[["entity", "period_date"]]).groupby(["entity", "period_date"])[MAPPING_WEIGHTS].sum()
+    cov = read_str_csv(TABLES / "coverage.csv").drop(columns=MAPPING_WEIGHTS).join(w, on=["entity", "period_date"])
+    write_csv(cov[COVERAGE], TABLES / "coverage.csv")
+
+    write_csv(_top(books[flags["unmapped_weight"]], UNMAPPED_TOP_N,
+                   ["sec_id", "id_type", "name", "max_weight", "entity_of_max", "periods"]),
+              TABLES / "unmapped_top.csv")
+    write_csv(_top(books[flags["unpriced_weight"]], UNPRICED_TOP_N,
+                   ["sec_id", "yf_ticker", "name", "max_weight", "entity_of_max", "periods"]),
+              TABLES / "unpriced_top.csv")
+    write_csv(_top(books[books["map_status"] == "no_cik"], NOCIK_TOP_N,
+                   ["sec_id", "ticker", "name", "max_weight", "entity_of_max", "periods"]),
+              TABLES / "nocik_top.csv")
+
+    rets = daily_returns(prices)
+    t_of = {str(h): t for t, h in zip(cal["t"], cal["holdings_date"])}
+    qrow = cal.set_index("t")
+    held = books[books["yf_ticker"].fillna("").isin(set(prices.columns))]
+    moves = []
+    for (eid, period), b in held.groupby(["entity", "period_date"], sort=True):
+        t = t_of[period]
+        lo, hi = qrow.at[t, "q_start"], qrow.at[t, "q_end"]
+        window = rets.loc[(rets.index > lo) & (rets.index <= hi)]
+        for _, r in b.iterrows():
+            s = window[r["yf_ticker"]]
+            for d, x in s[s.abs() > LARGE_MOVE_ABS].items():
+                moves.append([eid, t, r["sec_id"], r["yf_ticker"], d.strftime("%Y-%m-%d"), x, r["weight"]])
+    large = pd.DataFrame(moves, columns=["entity", "t", "sec_id", "yf_ticker", "date", "daily_return", "weight"])
+    write_csv(large.sort_values(["entity", "t", "date", "sec_id"], kind="mergesort"), TABLES / "large_moves.csv")
+
+
 def section_2(cfg) -> list[str]:
-    """SECURITY_MAP to data/processed/security_map.csv (step 2.2) and nav_monthly.csv (step 2.1b-2)."""
+    """SECURITY_MAP to data/processed/security_map.csv (step 2.2), nav_monthly.csv (step 2.1b-2),
+    then the mapping coverage and review lists (step 2.5)."""
     smap = security_map_from_dir(ROOT / "data")
     write_csv(smap, PROCESSED / "security_map.csv")
     navm, failures = nav_monthly(cfg)
     write_csv(navm, TABLES / "nav_monthly.csv")
+    mapping_coverage(cfg, smap)
     return failures
 
 
