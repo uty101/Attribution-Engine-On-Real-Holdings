@@ -70,16 +70,115 @@ def _first_equity(figi: pd.DataFrame) -> pd.DataFrame:
     return eq.set_index("sec_id")[["ticker", "figi", "name"]]
 
 
+def name_tokens(name: str) -> list[str]:
+    """instructions/02b, step 2.1c: upper-case, every non-alphanumeric character to a space, split,
+    and a leading `THE` dropped."""
+    t = re.sub(r"[^A-Z0-9]", " ", str(name).upper()).split()
+    return t[1:] if t and t[0] == "THE" else t
+
+
+def name_check(holding_name: str, result_name: str) -> str:
+    """'' when the first tokens of the 2 normalised names are equal, else the reject reason."""
+    h, r = name_tokens(holding_name), name_tokens(result_name)
+    if not h or not r:
+        return f"name check: empty name ({holding_name!r} vs {result_name!r})"
+    if h[0] != r[0]:
+        return f"name check: {h[0]} != {r[0]}"
+    return ""
+
+
+def isin_check_digit(body: str) -> str:
+    """The ISO 6166 Luhn check digit of an 11-character ISIN body."""
+    digits = "".join(str(int(c, 36)) for c in body)
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch) * (2 if i % 2 == 0 else 1)
+        total += d // 10 + d % 10
+    return str((10 - total % 10) % 10)
+
+
+def us_isin(cusip: str) -> str:
+    """instructions/02b, step 2.1c: `"US" + cusip + Luhn check digit`."""
+    return "US" + cusip + isin_check_digit("US" + cusip)
+
+
+# instructions/02b, step 2.1c: the exchanges each fallback pass accepts
+FIGI_US_EXCH = {"US", "UN", "UW", "UQ", "UA", "UR", "UP", "UF", "UV", "UD"}
+YAHOO_US_EXCH = {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX", "BTS"}
+YAHOO_TYPES = {"EQUITY", "ETF"}
+FALLBACK = [
+    "sec_id", "pass", "query_type", "query_value", "rank", "ticker", "name", "exch_code", "market_sector",
+    "security_type", "accepted", "reject_reason",
+]
+FALLBACK_SOURCE = {1: "openfigi", 2: "figi_isin", 3: "figi_noexch", 4: "yahoo_isin"}
+
+
+def judge_results(
+    sec_id: str, pass_no: int, query_type: str, query_value: str, results: list[dict], holding_name: str,
+    no_result_reason: str = "no result",
+) -> list[list]:
+    """FALLBACK rows for 1 query of pass 2, 3 or 4: every result, with the first acceptable one
+    accepted (instructions/02b, step 2.1c).
+
+    `results` are dicts with ticker, name, exch_code, market_sector, security_type. Pass 2 needs
+    marketSector Equity; pass 3 also an exchange in FIGI_US_EXCH; pass 4 a Yahoo quoteType
+    (in security_type) of EQUITY or ETF and an exchange in YAHOO_US_EXCH. Passes 2 to 4 all need
+    the name check against `holding_name`.
+    """
+    if not results:
+        return [[sec_id, pass_no, query_type, query_value, None, "", "", "", "", "", False, no_result_reason]]
+    rows, done = [], False
+    for rank, r in enumerate(results, start=1):
+        if done:
+            reason = "an earlier result was accepted"
+        elif pass_no in (2, 3) and r.get("market_sector") != "Equity":
+            reason = f"marketSector {r.get('market_sector')!r} is not Equity"
+        elif pass_no == 3 and r.get("exch_code") not in FIGI_US_EXCH:
+            reason = f"exchCode {r.get('exch_code')!r} is not a US venue"
+        elif pass_no == 4 and r.get("security_type") not in YAHOO_TYPES:
+            reason = f"quoteType {r.get('security_type')!r} is not EQUITY or ETF"
+        elif pass_no == 4 and r.get("exch_code") not in YAHOO_US_EXCH:
+            reason = f"exchange {r.get('exch_code')!r} is not a US venue"
+        elif not r.get("ticker"):
+            reason = "no ticker"
+        else:
+            reason = name_check(holding_name, r.get("name", ""))
+        ok = not done and reason == ""
+        done = done or ok
+        rows.append([
+            sec_id, pass_no, query_type, query_value, rank, r.get("ticker") or "", r.get("name") or "",
+            r.get("exch_code") or "", r.get("market_sector") or "", r.get("security_type") or "", ok, reason,
+        ])
+    return rows
+
+
+def _accepted_fallback(fallback: pd.DataFrame) -> pd.DataFrame:
+    """Per sec_id, the accepted fallback result of the lowest pass."""
+    fb = fallback.fillna("")
+    fb = fb[fb["accepted"].astype(str).isin(["True", "true", "1"])].copy()
+    fb["_pass"] = pd.to_numeric(fb["pass"])
+    fb = fb.sort_values(["sec_id", "_pass"], kind="mergesort").drop_duplicates("sec_id")
+    return fb.set_index("sec_id")[["_pass", "ticker", "name"]]
+
+
 def build_security_map(
-    figi: pd.DataFrame, overrides: pd.DataFrame, tickers: pd.DataFrame, sic: pd.DataFrame, ff12: pd.DataFrame
+    figi: pd.DataFrame,
+    fallback: pd.DataFrame,
+    overrides: pd.DataFrame,
+    tickers: pd.DataFrame,
+    sic: pd.DataFrame,
+    ff12: pd.DataFrame,
 ) -> pd.DataFrame:
     """SECURITY_MAP, 1 row per `sec_id` in `figi`, sorted by `sec_id`.
 
-    `figi` is data/raw/openfigi/mapping.csv; `overrides` is data/manual/overrides.csv;
-    `tickers` has columns cik and ticker (company_tickers.json); `sic` is data/raw/sec/sic.csv;
-    `ff12` is `parse_siccodes12` output.
+    `figi` is data/raw/openfigi/mapping.csv; `fallback` is data/raw/openfigi/fallback.csv;
+    `overrides` is data/manual/overrides.csv; `tickers` has columns cik and ticker
+    (company_tickers.json); `sic` is data/raw/sec/sic.csv; `ff12` is `parse_siccodes12` output.
 
-    - ticker: the first OpenFIGI equity result's ticker, replaced by an override `ticker` row.
+    - ticker: an override `ticker` row, else the first OpenFIGI equity result (pass 1), else the
+      accepted fallback result of pass 2, 3 or 4 (instructions/02b, step 2.1c).
+    - source: `openfigi`, `figi_isin`, `figi_noexch` or `yahoo_isin` for the pass that gave the
+      ticker (`openfigi` when none did), with `;override_ticker` and `;override_cik` appended.
     - cik: exact match on the normalised ticker; an override `cik` row sets it when that match fails.
     - map_status: `no_match` (no ticker), `no_cik`, `no_sic`, else `mapped` (D-12).
     - ff12: blank for `no_match` (the Unmapped bucket); Other for `no_cik` and `no_sic` (Convention 4.6).
@@ -87,6 +186,7 @@ def build_security_map(
     figi = figi.fillna("")
     ids = figi.drop_duplicates("sec_id").set_index("sec_id")["id_type"].sort_index()
     eq = _first_equity(figi)
+    fb = _accepted_fallback(fallback)
     ov = overrides.fillna("").astype(str)
     ov_ticker = dict(zip(ov.loc[ov["kind"] == "ticker", "sec_id"], ov.loc[ov["kind"] == "ticker", "value"]))
     ov_cik = dict(zip(ov.loc[ov["kind"] == "cik", "sec_id"], ov.loc[ov["kind"] == "cik", "value"]))
@@ -98,10 +198,14 @@ def build_security_map(
 
     rows = []
     for sid, kind in ids.items():
-        source = []
         ticker = figi_id = figi_name = ""
+        base = FALLBACK_SOURCE[1]
         if sid in eq.index:
             ticker, figi_id, figi_name = eq.loc[sid, ["ticker", "figi", "name"]]
+        elif sid in fb.index:
+            p, ticker, figi_name = fb.loc[sid, ["_pass", "ticker", "name"]]
+            base = FALLBACK_SOURCE[int(p)]
+        source = [base]
         if sid in ov_ticker:
             ticker = ov_ticker[sid]
             source.append("override_ticker")
@@ -128,8 +232,7 @@ def build_security_map(
                     sic_code = int(sic_code)
                     status, ff = "mapped", sic_to_ff12(sic_code, ff12)
         rows.append([
-            sid, kind, ticker, yf_ticker(ticker), figi_id, figi_name, cik, sic_code, ff, status,
-            ";".join(source) if source else "openfigi",
+            sid, kind, ticker, yf_ticker(ticker), figi_id, figi_name, cik, sic_code, ff, status, ";".join(source),
         ])
     out = pd.DataFrame(rows, columns=SECURITY_MAP)
     return out.astype({"cik": "Int64", "sic": "Int64"})
@@ -152,6 +255,7 @@ def security_map_from_dir(data_dir: str | Path) -> pd.DataFrame:
 
     return build_security_map(
         csv(d / "raw" / "openfigi" / "mapping.csv"),
+        csv(d / "raw" / "openfigi" / "fallback.csv"),
         csv(d / "manual" / "overrides.csv"),
         load_company_tickers(d / "raw" / "sec" / "company_tickers.json"),
         csv(d / "raw" / "sec" / "sic.csv"),

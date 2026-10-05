@@ -7,6 +7,7 @@
     python scripts/pull_data.py --stage french
     python scripts/pull_data.py --stage prices
     python scripts/pull_data.py --stage navret
+    python scripts/pull_data.py --stage figi2
 
 Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
 `--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
@@ -44,7 +45,7 @@ sys.path.insert(0, str(ROOT))
 
 import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
-from attrib.mapping import norm_ticker, security_map_from_dir  # noqa: E402
+from attrib.mapping import FALLBACK, judge_results, norm_ticker, security_map_from_dir, us_isin  # noqa: E402
 from attrib.edgar import (  # noqa: E402
     HOLDINGS_RAW_NPORT,
     NPORT_RETURNS,
@@ -56,6 +57,7 @@ from attrib.edgar import (  # noqa: E402
     list_13f_filings,
     list_nport_filings,
     parse_nport,
+    valid_isin,
 )
 
 FIXTURES = ROOT / "tests" / "fixtures"
@@ -238,6 +240,112 @@ def stage_figi(cfg) -> None:
     print(f"{client.n_retries} retries")
 
 
+def holding_names(cfg) -> dict[str, str]:
+    """Per sec_id, the name on the book row with the largest weight (instructions/02b, step 2.1c)."""
+    H = holdings_dates(cfg)
+    failures: list[str] = []
+    books = []
+    for eid, e in cfg.entities.items():
+        if e.type == "fund":
+            book, _ = run_all.fund_books(eid, H, cfg.edgar.implied_price_lo, cfg.edgar.implied_price_hi, failures)
+        else:
+            book, _ = run_all.benchmark_books(eid, H, failures)
+        books.append(book)
+    b = pd.concat(books, ignore_index=True).astype({"value_usd": float})
+    b["weight"] = b["value_usd"] / b.groupby(["entity", "period_date"])["value_usd"].transform("sum")
+    b = b.sort_values(["sec_id", "weight", "entity", "period_date"], ascending=[True, False, True, True],
+                      kind="mergesort").drop_duplicates("sec_id")
+    return dict(zip(b["sec_id"], b["name"]))
+
+
+def isin_candidates(sec_id: str, nport: pd.DataFrame) -> list[str]:
+    """Pass 2's ISINs for a sec_id (instructions/02b, step 2.1c): (i) the valid ISINs of N-PORT rows
+    whose cusip or other_id equals it; (ii) else, for a CUSIP starting with a digit, the US ISIN.
+    An ISIN sec_id is its own ISIN."""
+    if len(sec_id) == 12:
+        return [sec_id]
+    hit = nport[(nport["cusip"] == sec_id) | (nport["other_id"] == sec_id)]
+    found = sorted({i for i in hit["isin"] if valid_isin(i)})
+    if found:
+        return found
+    return [us_isin(sec_id)] if sec_id[0].isdigit() else []
+
+
+def _figi_results(res: dict) -> tuple[list[dict], str]:
+    data = res.get("data") or []
+    out = [{"ticker": d.get("ticker") or "", "name": d.get("name") or "", "exch_code": d.get("exchCode") or "",
+            "market_sector": d.get("marketSector") or "", "security_type": d.get("securityType") or ""} for d in data]
+    return out, res.get("warning") or res.get("error") or "no result"
+
+
+def stage_figi2(cfg) -> None:
+    """data/raw/openfigi/fallback.csv: passes 2 to 4 for every sec_id with no pass-1 equity result
+    (instructions/02b, step 2.1c). Every result seen is written, accepted or not."""
+    key = os.environ.get("OPENFIGI_API_KEY", "").strip()
+    o, e = cfg.openfigi, cfg.edgar
+    batch, interval = (o.batch_with_key, o.min_interval_with_key_s) if key else (o.batch_no_key, o.min_interval_no_key_s)
+    client = OpenFigiClient(key, interval, e.retries, e.backoff_s, e.timeout_s)
+
+    figi = pd.read_csv(RAW / "openfigi" / "mapping.csv", dtype=str, keep_default_na=False)
+    has_eq = set(figi.loc[figi["market_sector"] == "Equity", "sec_id"])
+    targets = sorted(set(figi["sec_id"]) - has_eq)
+    names = holding_names(cfg)
+    nport = pd.concat(
+        [pd.read_csv(RAW / "edgar" / "nport" / f"holdings_{eid}.csv", dtype=str, keep_default_na=False)
+         for eid, ent in cfg.entities.items() if ent.type == "benchmark"],
+        ignore_index=True,
+    )
+    isins = {s: isin_candidates(s, nport) for s in targets}
+    print(f"{len(targets)} sec_ids without a pass-1 equity result; {sum(bool(v) for v in isins.values())} have an ISIN")
+    rows: list[list] = []
+    accepted: set[str] = set()
+
+    def run_figi(pass_no: int, queries: list[tuple[str, str, dict]]) -> None:
+        """queries: (sec_id, query_value, job), in order; a sec_id's later queries are skipped once 1 is accepted."""
+        results = []
+        for i in range(0, len(queries), batch):
+            chunk = queries[i : i + batch]
+            results += client.map([q[2] for q in chunk])
+        for (sid, value, job), res in zip(queries, results):
+            if sid in accepted:
+                continue
+            found, why = _figi_results(res)
+            out = judge_results(sid, pass_no, job["idType"], value, found, names[sid], why)
+            rows.extend(out)
+            if any(r[10] for r in out):
+                accepted.add(sid)
+
+    q2 = [(s, i, {"idType": "ID_ISIN", "idValue": i, "exchCode": "US"}) for s in targets for i in isins[s]]
+    run_figi(2, q2)
+    print(f"pass 2: {len(q2)} queries, {len(accepted)} accepted", flush=True)
+    n = len(accepted)
+    q3 = [(s, s, {"idType": f"ID_{id_type(s).upper()}", "idValue": s}) for s in targets if s not in accepted]
+    run_figi(3, q3)
+    print(f"pass 3: {len(q3)} queries, {len(accepted) - n} accepted", flush=True)
+    n = len(accepted)
+    q4 = [(s, i) for s in targets if s not in accepted for i in isins[s]]
+    for k, (sid, isin) in enumerate(q4):
+        if sid in accepted:
+            continue
+        try:
+            quotes = yfinance.Search(isin, max_results=8).quotes
+        except Exception as exc:  # noqa: BLE001 - a failed search is a pull failure
+            sys.exit(f"stop under rule 4: yfinance.Search({isin!r}) raised {type(exc).__name__}: {exc}")
+        found = [{"ticker": q.get("symbol") or "", "name": q.get("longname") or q.get("shortname") or "",
+                  "exch_code": q.get("exchange") or "", "market_sector": "", "security_type": q.get("quoteType") or ""}
+                 for q in quotes]
+        out = judge_results(sid, 4, "yahoo_search", isin, found, names[sid])
+        rows.extend(out)
+        if any(r[10] for r in out):
+            accepted.add(sid)
+        if k % 50 == 0:
+            print(f"  pass 4: {k + 1} / {len(q4)}", flush=True)
+    print(f"pass 4: {len(q4)} queries, {len(accepted) - n} accepted; {len(targets) - len(accepted)} still unmatched")
+    df = pd.DataFrame(rows, columns=FALLBACK).astype({"rank": "Int64"})
+    df = df.sort_values(["sec_id", "pass", "query_value", "rank"], kind="mergesort")
+    write_csv(df, RAW / "openfigi" / "fallback.csv")
+
+
 def stage_sec(cfg, client: EdgarClient) -> None:
     """company_tickers.json as downloaded, and sic.csv for every CIK reachable by ticker -> CIK.
 
@@ -253,6 +361,10 @@ def stage_sec(cfg, client: EdgarClient) -> None:
     figi = pd.read_csv(RAW / "openfigi" / "mapping.csv", dtype=str, keep_default_na=False)
     ov = pd.read_csv(OVERRIDES, dtype=str, keep_default_na=False)
     tickers = set(figi.loc[figi["market_sector"] == "Equity", "ticker"]) | set(ov.loc[ov["kind"] == "ticker", "value"])
+    fb_path = RAW / "openfigi" / "fallback.csv"
+    if fb_path.exists():  # instructions/02b, step 2.1c: tickers of accepted fallback results
+        fb = pd.read_csv(fb_path, dtype=str, keep_default_na=False)
+        tickers |= set(fb.loc[fb["accepted"] == "True", "ticker"])
     tickers.discard("")
     ciks = {c for t in tickers for c in by_ticker.get(norm_ticker(t), ())}
     ciks |= {int(v) for v in ov.loc[ov["kind"] == "cik", "value"]}
@@ -364,8 +476,11 @@ def stage_prices(cfg) -> None:
               RAW / "prices" / "missing.csv")
     print(f"panel {panel.shape}, {panel.index[0].date()} to {panel.index[-1].date()}, {len(missing)} missing")
 
-    nav_tickers = [cfg.entities[e].nav_ticker for e in cfg.entities if cfg.entities[e].type == "fund"]
-    nav_tickers += [cfg.entities[e].etf_ticker for e in cfg.entities if cfg.entities[e].type == "benchmark"]
+    # instructions/02b, step 2.3b: columns JENIX, POLIX, IVV, IWF, AKRE; AKRIX (nav_source nport) is not requested
+    ents = cfg.entities.values()
+    nav_tickers = [e.nav_ticker for e in ents if e.type == "fund" and e.nav_source == "yfinance"]
+    nav_tickers += [e.etf_ticker for e in ents if e.type == "benchmark"]
+    nav_tickers += [e.etf_successor for e in ents if e.type == "fund" and e.etf_successor]
     close, errors = yf_close(nav_tickers, cfg)
     cols = [_series(close, t) for t in nav_tickers]
     empty = [t for t, s in zip(nav_tickers, cols) if s.empty]
@@ -379,11 +494,13 @@ def stage_prices(cfg) -> None:
                                          "n": s.notna().sum()})).to_string())
 
 
-def class_name(client: EdgarClient, class_id: str) -> str:
-    """The class name EDGAR shows on the class's company page ("Class/Contract: C... <name>")."""
-    html = client.get_bytes(CLASS_PAGE_URL.format(class_id=class_id)).decode("latin-1")
-    m = re.search(rf"Class/Contract:\s*(?:<[^>]+>\s*)*{class_id}\s*(?:<[^>]+>|&nbsp;|\s)*([^<&]+)", html)
-    return m.group(1).strip() if m else ""
+def class_name(client: EdgarClient, class_id: str) -> tuple[str, dict]:
+    """The class name EDGAR shows on the class's company page ("Class/Contract: C... <name>"), and
+    the page's url and sha256 for the manifest (instructions/02c, Section B)."""
+    url = CLASS_PAGE_URL.format(class_id=class_id)
+    b = client.get_bytes(url)
+    m = re.search(rf"Class/Contract:\s*(?:<[^>]+>\s*)*{class_id}\s*(?:<[^>]+>|&nbsp;|\s)*([^<&]+)", b.decode("latin-1"))
+    return (m.group(1).strip() if m else ""), {"url": url, "sha256": sha256(b), "form": "class page (HTML)"}
 
 
 def stage_navret(cfg, client: EdgarClient) -> dict:
@@ -407,7 +524,9 @@ def stage_navret(cfg, client: EdgarClient) -> dict:
         series, cls = h["seriesId"], h["classId"]
         series_classes = sorted((r["classId"], r["symbol"]) for r in rows_mf if r["seriesId"] == series)
         etf = [c for c, s in series_classes if e.etf_successor and s == e.etf_successor]
-        resolved.append([eid, e.nav_ticker, h["cik"], series, cls, class_name(client, cls), "company_tickers_mf.json",
+        cname, page = class_name(client, cls)
+        uncommitted[f"edgar/nport_returns/class_pages/{cls}.html"] = page
+        resolved.append([eid, e.nav_ticker, h["cik"], series, cls, cname, "company_tickers_mf.json",
                          ";".join(f"{c}:{s}" for c, s in series_classes), ";".join(etf)])
 
         filings = list_nport_filings(client, series)
@@ -581,9 +700,13 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret"])
+    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret", "figi2"])
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
+    if args.stage == "figi2":
+        stage_figi2(cfg)
+        update_manifest("figi2")
+        return
     if args.stage == "figi":
         stage_figi(cfg)
         update_manifest("figi")

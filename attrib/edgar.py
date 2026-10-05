@@ -28,7 +28,7 @@ HOLDINGS = ["entity", "period_date", "cusip", "isin", "sec_id", "name", "value_u
 FILINGS_NPORT = ["entity", "series_id", "accession", "filing_date", "period_date"]
 HOLDINGS_RAW_NPORT = [
     "entity", "accession", "period_date", "name", "title", "cusip", "isin", "balance", "units",
-    "val_usd", "pct_val", "asset_cat", "issuer_cat", "inv_country",
+    "val_usd", "pct_val", "asset_cat", "issuer_cat", "inv_country", "other_id",
 ]
 MONTHLY_RETURNS_NPORT = ["class_id", "month", "rtn_pct"]
 NPORT_RETURNS = ["entity", "series_id", "class_id", "accession", "filing_date", "period_date", "month", "rtn_pct"]
@@ -356,6 +356,9 @@ def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
         if cusip == "000000000":
             cusip = ""
         isin = it.find("{*}identifiers/{*}isin")
+        # instructions/02b, step 2.1c: the `other` identifier labelled "Inhouse Asset ID"
+        other_id = next((o.get("value", "").strip() for o in it.iterfind("{*}identifiers/{*}other")
+                         if o.get("otherDesc", "").strip() == "Inhouse Asset ID"), "")
         rows.append(
             [
                 "", "", header["repPdDate"],
@@ -370,6 +373,7 @@ def parse_nport(xml: bytes) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
                 _text(it, "{*}assetCat"),
                 _text(it, "{*}issuerCat"),
                 _text(it, "{*}invCountry"),
+                other_id,
             ]
         )
     return header, pd.DataFrame(rows, columns=HOLDINGS_RAW_NPORT), returns

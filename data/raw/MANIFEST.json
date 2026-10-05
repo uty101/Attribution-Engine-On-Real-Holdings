@@ -9,12 +9,13 @@
     "yfinance": "1.7.0"
   },
   "pulled_at_utc": {
-    "edgar": "2026-10-02T18:11:25Z",
+    "edgar": "2026-10-05T09:49:30Z",
     "figi": "2026-10-02T21:10:16Z",
+    "figi2": "2026-10-05T09:55:29Z",
     "french": "2026-10-02T21:15:47Z",
     "navret": "2026-10-02T22:46:46Z",
     "prices": "2026-10-02T21:21:42Z",
-    "sec": "2026-10-02T21:15:13Z"
+    "sec": "2026-10-05T10:00:41Z"
   },
   "row_counts": {
     "edgar/13f/filings_akre.csv": 125,
@@ -30,10 +31,11 @@
     "edgar/nport_returns/series_resolved.csv": 3,
     "french/ff5_monthly.csv": 758,
     "french/mom_monthly.csv": 1196,
+    "openfigi/fallback.csv": 2519,
     "openfigi/mapping.csv": 1622,
     "prices/missing.csv": 2,
     "sec/series_resolved.csv": 2,
-    "sec/sic.csv": 1221
+    "sec/sic.csv": 1258
   },
   "sha256": {
     "edgar/13f/akre/2019-03-31_0001112520-19-000015.xml": "9c802ea6fef4d850c7c8c384618eb1954fb6d226d15ccebea1751df486f138c2",
@@ -137,8 +139,8 @@
     "edgar/13f/polen/2026-06-30_0001172661-26-003035.xml": "6899ef1afa5377ed531f5eaeaa80f504b7c21efe72642cbbacd1ec1b06b7d063",
     "edgar/nport/filings_ivv.csv": "f2c07eb460da3ae58451cd0868b11c0a65b3bbaa4f1f4ec31fb2685ef0329616",
     "edgar/nport/filings_iwf.csv": "d27212d049000ee3e1851fb737b6cbdf92d35108f522de68c23cfc868006e6f0",
-    "edgar/nport/holdings_ivv.csv": "f6f5ca6423422e8326f9b6daed7f1d5d651f0f0f896dbe6ab61e9a121892f84b",
-    "edgar/nport/holdings_iwf.csv": "6efecac85f70cb9ea13258d4bd003631f572a4a7f887561f9c03c0d3a88976e9",
+    "edgar/nport/holdings_ivv.csv": "19e49957dfb413110b5a43914c722d93678931d255ff49114b4aefeb10c744ad",
+    "edgar/nport/holdings_iwf.csv": "3237092906b678dce21dfd7f02b03935ae3d22c9f3da661c2239acc649b0a96f",
     "edgar/nport_returns/akre_monthly.csv": "3e8088aee1e167a078c1787563841f944d162f7e9d242b2788360b522cb14ba9",
     "edgar/nport_returns/jensen_monthly.csv": "bb0aab16a7d0763000476c3f2c0c662d45dc0ff378d3bb2ff8c2b661b3f45d6c",
     "edgar/nport_returns/polen_monthly.csv": "1d79f6313f7611d652bb4f498abb28b766e6d8aaece91b609fe04fac19508117",
@@ -146,13 +148,14 @@
     "french/Siccodes12.txt": "55b51d1dc6939a570cd866824e9d49a9b16c0ad6247286b676aca25af8c78409",
     "french/ff5_monthly.csv": "9b221d2a3d2a803b691e6aa7b3f3b6231f53de98c97b078bd10849bea2f3c1c2",
     "french/mom_monthly.csv": "fd793e12da4b6f48d2b5e40de29c6763f4067a5d7871f65c6028ce7af6bf2f20",
+    "openfigi/fallback.csv": "8967c932cb831158d25fafea8d648d2f7ebfc69ebfd449a45e25fa3f799e00ed",
     "openfigi/mapping.csv": "1a35f73753950c0d6b1847a0ea13da14ea444dc8b446ef8c7c18cbfe18e630de",
     "prices/adjclose.parquet": "248c6504d891a5122dc26962351247750ac7f215e2759b4cd745f1733c6c21a3",
     "prices/missing.csv": "a2f64d477736dfded26a63663a61aabca4a32d8364e1d0e2c06686028473756c",
-    "sec/company_tickers.json": "9058f1e002140b38df0001c64c6f0d98657e177359d2f2879ad92a30d1eee9ee",
+    "sec/company_tickers.json": "31a807ba3f3c0b3340008aba9c3b487734d5b2d8dd5751c2a1b3667696cfa315",
     "sec/company_tickers_mf.json": "f17facb023662f07c36a4809b6a65e65cd336eb3afae8e160d2b665cbe536c38",
     "sec/series_resolved.csv": "dce782156fc755c8edc0422e3dd432b8da622639e7da94bce013929c5cf4ea5e",
-    "sec/sic.csv": "89831db54463bc536029bec9c78daeb1b89d6ecb2a07e1e5dce3c63a7509374b"
+    "sec/sic.csv": "f84f654abfc22140f97a823904512589dc5d2b1b7925720b7f7abcba2652ccf3"
   },
   "uncommitted_sha256": {
     "edgar/nport/ivv/2019-09-30_0001752724-19-177847.xml": {
