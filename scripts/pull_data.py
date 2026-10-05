@@ -10,8 +10,10 @@
     python scripts/pull_data.py --stage prices --new-only
     python scripts/pull_data.py --stage navret
     python scripts/pull_data.py --stage figi2
+    python scripts/pull_data.py --holdings <path> --benchmark <path>
 
 Every stage but `fixtures` writes under data/raw/ and updates data/raw/MANIFEST.json.
+`--holdings` writes only under data/extra/ (gitignored) and leaves the manifest alone.
 `--stage figi` runs before `--stage sec`, which needs the OpenFIGI tickers.
 
 Reads SEC_USER_AGENT from the environment; stops if it is unset (rule 15). Reads the
@@ -47,11 +49,15 @@ sys.path.insert(0, str(ROOT))
 
 import run_all  # noqa: E402  (scripts/ is sys.path[0] when this file runs)
 from attrib.config import load_config  # noqa: E402
+from attrib import load_prices_dir, load_security_map, read_holdings  # noqa: E402
 from attrib.mapping import (  # noqa: E402
     FALLBACK,
+    build_security_map,
     cik_override_check,
     judge_results,
+    load_company_tickers,
     norm_ticker,
+    parse_siccodes12,
     security_map_from_dir,
     us_isin,
 )  # noqa: E402
@@ -756,6 +762,108 @@ def stage_edgar(cfg, client: EdgarClient) -> dict:
     return uncommitted
 
 
+EXTRA = ROOT / "data" / "extra"
+
+
+def stage_holdings(cfg, holdings: str, benchmark: str) -> None:
+    """`--holdings <path> --benchmark <path>` (step 7.3; instructions/07, C.3): every sec_id of the 2
+    files that is not in the data directory's SECURITY_MAP is mapped through OpenFIGI (pass 1, as
+    `--stage figi`), ticker -> CIK on the committed company_tickers.json and CIK -> SIC from the
+    EDGAR submissions JSON (for CIKs sic.csv lacks), with `build_security_map`; the rows go to
+    data/extra/security_map_extra.csv. Every yf_ticker the 2 files need that has no price column
+    is pulled as in `--stage prices` into data/extra/adjclose_extra.parquet. data/extra/ is
+    gitignored, and data/raw/ and its manifest are not touched."""
+    ids = sorted(set(read_holdings(holdings)["sec_id"]) | set(read_holdings(benchmark)["sec_id"]))
+    smap = load_security_map(ROOT / "data")
+    new = [s for s in ids if s not in set(smap["sec_id"])]
+    print(f"{len(ids)} sec_ids in the 2 files, {len(new)} not in the data directory: {new}")
+    if new:
+        key = os.environ.get("OPENFIGI_API_KEY", "").strip()
+        o, e = cfg.openfigi, cfg.edgar
+        batch, interval = (o.batch_with_key, o.min_interval_with_key_s) if key else (o.batch_no_key, o.min_interval_no_key_s)
+        figi_client = OpenFigiClient(key, interval, e.retries, e.backoff_s, e.timeout_s)
+        rows = []
+        for i in range(0, len(new), batch):
+            chunk = new[i : i + batch]
+            jobs = [{"idType": f"ID_{id_type(s).upper()}", "idValue": s, "exchCode": "US"} for s in chunk]
+            for sid, res in zip(chunk, figi_client.map(jobs)):
+                data = res.get("data") or []
+                status = "ok" if "data" in res else res.get("warning") or res.get("error") or ""
+                if not data:
+                    rows.append([sid, id_type(sid), status, None, *[""] * 7])
+                for rank, d in enumerate(data, start=1):
+                    rows.append([
+                        sid, id_type(sid), status, rank, d.get("figi") or "", d.get("compositeFIGI") or "",
+                        d.get("ticker") or "", d.get("name") or "", d.get("exchCode") or "",
+                        d.get("marketSector") or "", d.get("securityType") or "",
+                    ])
+        figi = pd.DataFrame(rows, columns=OPENFIGI_MAPPING).astype({"result_rank": "Int64"}).astype(str)
+        figi = figi.replace({"<NA>": ""})
+        print("OpenFIGI results:")
+        print(figi.to_string())
+
+        tickers = load_company_tickers(RAW / "sec" / "company_tickers.json")
+        by_ticker = tickers.assign(key=tickers["ticker"].map(norm_ticker)).groupby("key")["cik"].agg(set)
+        sic = pd.read_csv(RAW / "sec" / "sic.csv", dtype=str, keep_default_na=False)
+        eq = figi[figi["market_sector"] == "Equity"].drop_duplicates("sec_id")
+        ciks = {c for t in eq["ticker"] if t for c in by_ticker.get(norm_ticker(t), ())}
+        fetch = sorted(ciks - set(sic["cik"].astype(int)))
+        print(f"CIKs reached: {sorted(ciks)}; not in sic.csv, fetched from EDGAR: {fetch}")
+        if fetch:
+            client = client_from_env(cfg)
+            got = []
+            for cik in fetch:
+                sub = client.get_json(SUBMISSIONS_URL.format(cik=cik))
+                got.append([str(cik), sub.get("name") or "", str(sub.get("sic") or ""), sub.get("sicDescription") or ""])
+            got = pd.DataFrame(got, columns=SIC_CSV)
+            print(got.to_string())
+            sic = pd.concat([sic, got], ignore_index=True)
+        empty_fb = pd.DataFrame(columns=FALLBACK)
+        ff12 = parse_siccodes12((RAW / "french" / "Siccodes12.txt").read_text(encoding="latin-1"))
+        rows_new = build_security_map(figi, empty_fb, pd.read_csv(OVERRIDES, dtype=str, keep_default_na=False),
+                                      tickers, sic, ff12)
+        path = EXTRA / "security_map_extra.csv"
+        if path.exists():
+            old = pd.read_csv(path, dtype=str, keep_default_na=False)
+            rows_new = pd.concat([old[~old["sec_id"].isin(rows_new["sec_id"])], rows_new.astype(str)], ignore_index=True)
+        rows_new = rows_new.replace({"<NA>": ""}).sort_values("sec_id", kind="mergesort")
+        write_csv(rows_new, path)
+        print(f"wrote {path.relative_to(ROOT).as_posix()}:")
+        print(rows_new.to_string())
+
+    smap = load_security_map(ROOT / "data")
+    prices = load_prices_dir(ROOT / "data")
+    yf = smap.set_index("sec_id").loc[ids, "yf_ticker"]
+    need = sorted(set(yf[yf != ""]) - set(prices.columns))
+    print(f"yf_tickers with no price column: {need}")
+    if not need:
+        return
+    got = []
+    for i in range(0, len(need), PRICE_BATCH):
+        batch_t = need[i : i + PRICE_BATCH]
+        close, errors = yf_close(batch_t, cfg)
+        for t in batch_t:
+            s = _series(close, t)
+            if s.empty:
+                print(f"  no rows: {t} ({errors.get(t, 'no yfinance error recorded')})")
+            else:
+                got.append(s)
+    if not got:
+        return
+    panel = pd.concat(got, axis=1).sort_index()
+    path = EXTRA / "adjclose_extra.parquet"
+    if path.exists():
+        old = pd.read_parquet(path)
+        panel = old.drop(columns=[c for c in panel.columns if c in old.columns]).join(panel, how="outer").sort_index()
+    panel = panel[sorted(panel.columns)].astype("float64")
+    panel.index.name = "date"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    panel.to_parquet(path, engine="pyarrow", index=True)
+    print(f"wrote {path.relative_to(ROOT).as_posix()}: {panel.shape}, {panel.index[0].date()} to {panel.index[-1].date()}")
+    print(panel.apply(lambda s: pd.Series({"first": s.first_valid_index(), "last": s.last_valid_index(),
+                                           "n": s.notna().sum()})).to_string())
+
+
 def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
     """Pull time, library versions, CSV row counts and sha256 of every committed file under data/raw/."""
     m = json.loads(MANIFEST.read_text(encoding="utf-8")) if MANIFEST.exists() else {}
@@ -781,11 +889,20 @@ def update_manifest(stage: str, uncommitted: dict | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", required=True, choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret", "figi2"])
+    ap.add_argument("--stage", choices=["fixtures", "edgar", "figi", "sec", "french", "prices", "navret", "figi2"])
     ap.add_argument("--overrides-only", action="store_true", help="with --stage sec: instructions/03, step 3.0")
     ap.add_argument("--new-only", action="store_true", help="with --stage prices: instructions/03, step 3.0")
+    ap.add_argument("--holdings", help="with --benchmark, no --stage: step 7.3, map and price a new holdings file")
+    ap.add_argument("--benchmark", help="the benchmark holdings file for --holdings")
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
+    if args.holdings or args.benchmark:
+        if args.stage or not (args.holdings and args.benchmark):
+            ap.error("--holdings and --benchmark go together, without --stage")
+        stage_holdings(cfg, args.holdings, args.benchmark)
+        return
+    if not args.stage:
+        ap.error("give --stage, or --holdings with --benchmark")
     if args.stage == "figi2":
         stage_figi2(cfg)
         update_manifest("figi2")
