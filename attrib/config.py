@@ -95,6 +95,7 @@ class Bootstrap:
 class Report:
     dpi: int
     max_pages: int
+    min_factor_months: int
 
 
 @dataclass(frozen=True)

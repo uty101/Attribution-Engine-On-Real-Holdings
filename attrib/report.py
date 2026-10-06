@@ -35,6 +35,8 @@ TITLE = ParagraphStyle("title", parent=BODY, fontName="Helvetica-Bold", fontSize
 EFFECTS = ["allocation", "selection", "interaction"]
 FACTOR_LABELS = {"mkt": "Mkt-RF", "smb": "SMB", "hml": "HML", "rmw": "RMW", "cma": "CMA", "umd": "UMD"}
 NO_NAV = "No NAV series was supplied, so the reconstruction check is skipped."
+# instructions/08, A answer 2: page 2 when the fund has fewer than `report.min_factor_months` monthly returns
+SHORT_WINDOW = "Fewer than {n} monthly returns, so the factor fit is skipped."
 LIMITS_HEAD = "What a 13F book cannot see."
 # instructions/07, C.1: the 13F limits paragraph, verbatim
 LIMITS = (
@@ -212,6 +214,8 @@ def _page_1(fund_id: str, res: dict) -> list:
 
 
 def _page_2(fund_id: str, res: dict) -> list:
+    if res["factor_fit"].empty:  # the fit was not run: no Table 2 and no Chart 2 (instructions/08, A answer 2)
+        return [Paragraph(SHORT_WINDOW.format(n=res["min_factor_months"]), BODY)]
     fy = res["factor_by_year"]
     fy = fy[fy["series_id"] == f"{fund_id}_book"]  # D-23: the book series
     factors = list(FACTOR_LABELS)
@@ -275,7 +279,9 @@ def build_report(fund_id: str, results: dict, out_path: Path) -> Path:
     started on a fresh page, built with `invariant=1` so 2 builds of the same `results` are
     byte-identical. `results` holds the output frames cut to this fund (`book_quarterly` also
     carries the benchmark's rows), `fund_name`, `benchmark_name` and the chart PNGs `chart1` to
-    `chart3`; `gate` may be empty when no NAV series was supplied (D-28)."""
+    `chart3`; `gate` may be empty when no NAV series was supplied (D-28). When the factor fit was
+    skipped, `factor_fit` is empty, `chart2` is None and `min_factor_months` gives the threshold
+    for the page 2 line (instructions/08, A answer 2)."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(

@@ -852,6 +852,7 @@ def report_results(cfg, fund: str) -> dict:
         "chart1": (FIGURES / f"{fund}_alloc_vs_sel.png").read_bytes(),
         "chart2": (FIGURES / f"{fund}_rolling_betas.png").read_bytes(),
         "chart3": (FIGURES / f"{fund}_cte_top15.png").read_bytes(),
+        "min_factor_months": cfg.report.min_factor_months,
     }
 
 

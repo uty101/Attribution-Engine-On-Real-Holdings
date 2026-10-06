@@ -65,6 +65,7 @@ SPEC_KEYS = {
     "bootstrap.hi",
     "report.dpi",
     "report.max_pages",
+    "report.min_factor_months",
 }
 
 

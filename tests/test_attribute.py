@@ -23,6 +23,17 @@ def test_mini_end_to_end_offline(tmp_path):
     assert 1 <= len(PdfReader(out).pages) <= CFG.report.max_pages
 
 
+def test_short_window_skips_factor_page(tmp_path):
+    """instructions/08, A answer 2: the mini window has 6 monthly returns, fewer than
+    `report.min_factor_months`, so page 2 carries the skip line and the PDF has no Table 2."""
+    assert CFG.report.min_factor_months > 6
+    out = attribute(MINI / "holdings_fund.csv", MINI / "holdings_benchmark.csv", "2019-12-31", "2020-03-31",
+                    data_dir=MINI, out_dir=tmp_path)
+    text = "\n".join(p.extract_text() for p in PdfReader(out).pages)
+    assert f"Fewer than {CFG.report.min_factor_months} monthly returns, so the factor fit is skipped." in text
+    assert "Table 2" not in text
+
+
 def test_missing_cusip_error_lists_and_names_pull_command(tmp_path):
     """Every sec_id absent from the data directory is listed, and the pull command is named."""
     h = pd.read_csv(MINI / "holdings_fund.csv", dtype=str)

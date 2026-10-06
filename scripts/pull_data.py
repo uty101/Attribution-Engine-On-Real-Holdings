@@ -765,14 +765,16 @@ def stage_edgar(cfg, client: EdgarClient) -> dict:
 EXTRA = ROOT / "data" / "extra"
 
 
-def stage_holdings(cfg, holdings: str, benchmark: str) -> None:
+def stage_holdings(cfg, holdings: str, benchmark: str, retry_missing: bool = False) -> None:
     """`--holdings <path> --benchmark <path>` (step 7.3; instructions/07, C.3): every sec_id of the 2
     files that is not in the data directory's SECURITY_MAP is mapped through OpenFIGI (pass 1, as
     `--stage figi`), ticker -> CIK on the committed company_tickers.json and CIK -> SIC from the
     EDGAR submissions JSON (for CIKs sic.csv lacks), with `build_security_map`; the rows go to
     data/extra/security_map_extra.csv. Every yf_ticker the 2 files need that has no price column
-    is pulled as in `--stage prices` into data/extra/adjclose_extra.parquet. data/extra/ is
-    gitignored, and data/raw/ and its manifest are not touched."""
+    is pulled as in `--stage prices` into data/extra/adjclose_extra.parquet, except those already
+    listed in data/raw/prices/missing.csv, which `retry_missing` (`--retry-missing`) asks for again
+    (instructions/08, A answer 4). data/extra/ is gitignored, and data/raw/ and its manifest are not
+    touched."""
     ids = sorted(set(read_holdings(holdings)["sec_id"]) | set(read_holdings(benchmark)["sec_id"]))
     smap = load_security_map(ROOT / "data")
     new = [s for s in ids if s not in set(smap["sec_id"])]
@@ -836,6 +838,11 @@ def stage_holdings(cfg, holdings: str, benchmark: str) -> None:
     yf = smap.set_index("sec_id").loc[ids, "yf_ticker"]
     need = sorted(set(yf[yf != ""]) - set(prices.columns))
     print(f"yf_tickers with no price column: {need}")
+    if not retry_missing:  # instructions/08, A answer 4: known-missing tickers are skipped unless asked for
+        known = set(pd.read_csv(RAW / "prices" / "missing.csv", dtype=str, keep_default_na=False)["yf_ticker"])
+        skip = [t for t in need if t in known]
+        need = [t for t in need if t not in known]
+        print(f"skipped, already in data/raw/prices/missing.csv (pass --retry-missing to retry): {skip}")
     if not need:
         return
     got = []
@@ -894,13 +901,17 @@ def main() -> None:
     ap.add_argument("--new-only", action="store_true", help="with --stage prices: instructions/03, step 3.0")
     ap.add_argument("--holdings", help="with --benchmark, no --stage: step 7.3, map and price a new holdings file")
     ap.add_argument("--benchmark", help="the benchmark holdings file for --holdings")
+    ap.add_argument("--retry-missing", action="store_true",
+                    help="with --holdings: also retry the tickers in data/raw/prices/missing.csv (instructions/08, A 4)")
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
     if args.holdings or args.benchmark:
         if args.stage or not (args.holdings and args.benchmark):
             ap.error("--holdings and --benchmark go together, without --stage")
-        stage_holdings(cfg, args.holdings, args.benchmark)
+        stage_holdings(cfg, args.holdings, args.benchmark, args.retry_missing)
         return
+    if args.retry_missing:
+        ap.error("--retry-missing goes with --holdings and --benchmark")
     if not args.stage:
         ap.error("give --stage, or --holdings with --benchmark")
     if args.stage == "figi2":

@@ -80,3 +80,4 @@ hi = 0.95
 [report]
 dpi = 150
 max_pages = 4
+min_factor_months = 24

@@ -214,7 +214,8 @@ def _run(cfg, data_dir: Path, fund: str, bench: str, books: dict[str, pd.DataFra
         columns=["fund", "series", "mean", "p05", "p95"],
     )
 
-    # Section 5: returns-based factors on the fund book, over the months with both a book return and French data
+    # Section 5: returns-based factors on the fund book, over the months with both a book return and French data;
+    # not run below `report.min_factor_months` monthly returns (instructions/08, A answer 2)
     names = list(cfg.factors.names)
     ff = load_french(data_dir)
     first = pd.Period(dates[0], freq="M") + 1
@@ -224,14 +225,18 @@ def _run(cfg, data_dir: Path, fund: str, bench: str, books: dict[str, pd.DataFra
     ret.index = pd.PeriodIndex(ret.index, freq="M", name="month")
     ret = ret[ret.index.isin(months)]
     excess = ret - ff["rf"].reindex(ret.index)  # Convention 4.15
-    fac = ff.loc[months, names]
-    fit = returns_based(excess, fac, cfg.factors.hac_maxlags)
-    sid = f"{fund}_book"
-    factor_fit = pd.DataFrame({c: fit[c] for c in ("value", "se_hac", "t_hac")}).rename_axis("coef").reset_index()
-    factor_fit = factor_fit.assign(series_id=sid, series_kind="book", r2=fit["r2"], resid_vol_ann=fit["resid_vol_ann"],
-                                   n_months=fit["n_months"])
-    factor_by_year = factor_contrib_by_year(excess, fac, fit).assign(series_id=sid)
-    rb = rolling_betas(excess, fac, cfg.factors.rolling_window)
+    if len(excess) < cfg.report.min_factor_months:
+        factor_fit, factor_by_year, chart2 = pd.DataFrame(), pd.DataFrame(), None
+    else:
+        fac = ff.loc[months, names]
+        fit = returns_based(excess, fac, cfg.factors.hac_maxlags)
+        sid = f"{fund}_book"
+        factor_fit = pd.DataFrame({c: fit[c] for c in ("value", "se_hac", "t_hac")}).rename_axis("coef").reset_index()
+        factor_fit = factor_fit.assign(series_id=sid, series_kind="book", r2=fit["r2"],
+                                       resid_vol_ann=fit["resid_vol_ann"], n_months=fit["n_months"])
+        factor_by_year = factor_contrib_by_year(excess, fac, fit).assign(series_id=sid)
+        rb = rolling_betas(excess, fac, cfg.factors.rolling_window)
+        chart2 = chart_2_png(fund, rb, names, cfg.factors.rolling_window, cfg.report.dpi)
 
     # Section 6: active share and ex-ante TE at each holdings date, realised TE over every book month
     rk = cfg.risk
@@ -276,6 +281,7 @@ def _run(cfg, data_dir: Path, fund: str, bench: str, books: dict[str, pd.DataFra
         "book_quarterly": book_q, "coverage": cov, "fund_name": fund, "benchmark_name": bench,
         "chart1": chart_1_png(fund, bench, rP, rB, eff, cal.set_index("t")["q_end"], cfg.linking.zero_tol,
                               cfg.report.dpi),
-        "chart2": chart_2_png(fund, rb, names, cfg.factors.rolling_window, cfg.report.dpi),
+        "chart2": chart2,
         "chart3": chart_3_png(fund, bench, dec, te, h, rk.top_n_positions, cfg.report.dpi),
+        "min_factor_months": cfg.report.min_factor_months,
     }
