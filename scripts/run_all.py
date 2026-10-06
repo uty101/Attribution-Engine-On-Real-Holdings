@@ -1,8 +1,9 @@
-"""Regenerate outputs from data/raw/ and data/manual/ (D-01).
+"""Regenerate outputs from data/raw/ and data/manual/ (D-01; step 8.1).
 
-    python scripts/run_all.py --section N
+    python scripts/run_all.py              # every section
+    python scripts/run_all.py --section N  # every section up to and including N
 
-runs every section up to and including N. Offline: no network is touched.
+Offline: no network is touched.
 """
 
 from __future__ import annotations
@@ -882,12 +883,10 @@ SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--section", type=int, required=True, choices=range(1, 9))
+    ap.add_argument("--section", type=int, choices=sorted(SECTIONS), help="last section to run; default: all")
     args = ap.parse_args()
     cfg = load_config(ROOT / "config.toml")
-    for n in range(1, args.section + 1):
-        if n not in SECTIONS:
-            sys.exit(f"section {n} is not built yet")
+    for n in range(1, (args.section or max(SECTIONS)) + 1):
         failures = SECTIONS[n](cfg)
         if failures:
             print(f"stop under rule 4: section {n} checks failed:")
