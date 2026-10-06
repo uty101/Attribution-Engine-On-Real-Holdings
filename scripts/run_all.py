@@ -53,7 +53,7 @@ from attrib.edgar import (  # noqa: E402
 from attrib.mapping import security_map_from_dir  # noqa: E402
 from attrib.bootstrap import bootstrap_mean  # noqa: E402
 from attrib.reconstruction import gate, reconstruction_table  # noqa: E402
-from attrib.report import FACTOR_LABELS, build_report, chart_1_png, chart_2_png, chart_3_png  # noqa: E402
+from attrib.report import FACTOR_LABELS, QUARTERS_PER_YEAR, build_report, chart_1_png, chart_2_png, chart_3_png  # noqa: E402
 from attrib.risk import (  # noqa: E402
     DAILY_TO_MONTHLY,
     MONTHS_PER_YEAR,
@@ -878,7 +878,97 @@ def section_7(cfg) -> list[str]:
     return failures
 
 
-SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5, 6: section_6, 7: section_7}
+ANSWERS = ["question", "fund", "figure", "value", "interval_lo", "interval_hi", "source_table", "source_row"]
+ALPHA_Z = 1.645  # instructions/08, C: the alpha interval is alpha +/- 1.645 x HAC se
+LAST_H = "2026-06-30"  # instructions/08, C: the question 3 figures at the last holdings date
+
+
+def annualised(r: pd.Series) -> float:
+    """(1 + R)^(4 / T) - 1 over the T quarters of `r` (instructions/07, Deviation 7), as on report page 1."""
+    return float((1 + r).prod() ** (QUARTERS_PER_YEAR / len(r)) - 1)
+
+
+def answers(cfg) -> pd.DataFrame:
+    """Step 8.2 (instructions/08, Section C): the rows of answers.csv, figure by figure in that
+    table's order, each for every fund that passed the gate in config order. A value is the cell
+    its source_row names, except cum_excess_D and the 2 annualised returns (recomputed from the
+    fund's and its benchmark's book_quarterly rows) and the top-15 CTE share (the 15 largest |CTE|
+    at LAST_H over the TE there, as Chart 3)."""
+    def table(stem: str) -> pd.DataFrame:
+        return pd.read_csv(TABLES / f"{stem}.csv")
+
+    bq, linked, boot, fit = table("book_quarterly"), table("linked"), table("bootstrap"), table("factor_fit")
+    risk_q, te_r, cte, gate_df = table("risk_quarterly"), table("te_realised"), table("cte_positions"), table("gate")
+    funds = [k for k, e in cfg.entities.items() if e.type == "fund" and bool(gate_df.set_index("fund").at[k, "pass"])]
+    blank = (np.nan, np.nan)
+    rows: dict[str, list] = {f: [] for f in funds}
+    for fund in funds:
+        bench = cfg.entities[fund].benchmark
+        rP = bq[bq["entity"] == fund].sort_values("t")["book_return"]
+        rB = bq[bq["entity"] == bench].sort_values("t")["book_return"]
+        bq_row = f"entity={fund}|{bench},t=1..{len(rP)}"
+        lk = linked[(linked["fund"] == fund) & (linked["method"] == "carino")].set_index("bucket").loc["Total"]
+        bt = boot[boot["fund"] == fund].set_index("series")
+        ft = fit.set_index(["series_id", "coef"])
+        rq = risk_q[risk_q["fund"] == fund].set_index("holdings_date").loc[LAST_H]
+        tr = te_r[te_r["fund"] == fund].iloc[0]
+        dec = cte[(cte["fund"] == fund) & (cte["holdings_date"] == LAST_H)]
+        top = dec.assign(_abs=dec["cte"].abs()).sort_values(["_abs", "ticker"], ascending=[False, True],
+                                                            kind="mergesort").head(cfg.risk.top_n_positions)
+        big = dec.sort_values(["cte", "ticker"], ascending=[False, True], kind="mergesort").iloc[0]
+        g = gate_df.set_index("fund").loc[fund]
+        R = [float((1 + r).prod() - 1) for r in (rP, rB)]
+        out = [
+            [1, "cum_excess_D", R[0] - R[1], *blank, "book_quarterly", bq_row],
+            [1, "ann_return_fund", annualised(rP), *blank, "book_quarterly", f"entity={fund},t=1..{len(rP)}"],
+            [1, "ann_return_bench", annualised(rB), *blank, "book_quarterly", f"entity={bench},t=1..{len(rB)}"],
+            *[[1, f"linked_{e}", lk[e], *blank, "linked", f"fund={fund},method=carino,bucket=Total"] for e in EFFECTS],
+            *[[1, f"mean_q_{s}", bt.at[s, "mean"], bt.at[s, "p05"], bt.at[s, "p95"], "bootstrap",
+               f"fund={fund},series={s}"] for s in ("allocation", "selection")],
+        ]
+        for kind in ("book", "nav"):
+            a = ft.loc[(f"{fund}_{kind}", "alpha")]
+            out.append([2, f"alpha_month_{kind}", a["value"], a["value"] - ALPHA_Z * a["se_hac"],
+                        a["value"] + ALPHA_Z * a["se_hac"], "factor_fit", f"series_id={fund}_{kind},coef=alpha"])
+        for kind in ("book", "nav"):
+            out.append([2, f"alpha_t_{kind}", ft.at[(f"{fund}_{kind}", "alpha"), "t_hac"], *blank, "factor_fit",
+                        f"series_id={fund}_{kind},coef=alpha"])
+        out += [
+            [2, "beta_mkt_book", ft.at[(f"{fund}_book", "mkt"), "value"], *blank, "factor_fit",
+             f"series_id={fund}_book,coef=mkt"],
+            [2, "r2_book", ft.at[(f"{fund}_book", "alpha"), "r2"], *blank, "factor_fit",
+             f"series_id={fund}_book,coef=alpha"],
+            [2, "resid_vol_ann_book", ft.at[(f"{fund}_book", "alpha"), "resid_vol_ann"], *blank, "factor_fit",
+             f"series_id={fund}_book,coef=alpha"],
+            [3, "active_share_2026_06_30", rq["active_share"], *blank, "risk_quarterly",
+             f"fund={fund},holdings_date={LAST_H}"],
+            [3, "te_exante_2026_06_30", rq["te_exante"], *blank, "risk_quarterly", f"fund={fund},holdings_date={LAST_H}"],
+            [3, "te_exante_mean", tr["te_exante_mean"], *blank, "te_realised", f"fund={fund}"],
+            [3, "te_realised_84m", tr["te_realised"], *blank, "te_realised", f"fund={fund}"],
+            [3, "top15_cte_share_2026_06_30", float(top["cte"].sum()) / rq["te_exante"], *blank, "cte_positions",
+             f"fund={fund},holdings_date={LAST_H},top={cfg.risk.top_n_positions}"],
+            [3, f"largest_cte_{big['ticker']}_2026_06_30", big["cte"], *blank, "cte_positions",
+             f"fund={fund},holdings_date={LAST_H},ticker={big['ticker']}"],
+            [4, "gate_corr", g["corr"], *blank, "gate", f"fund={fund}"],
+            [4, "gate_n_quarters", g["n_quarters"], *blank, "gate", f"fund={fund}"],
+            [4, "te_gap_ann", g["te_gap_ann"], *blank, "gate", f"fund={fund}"],
+            [4, "mean_q_gap", bt.at["gap", "mean"], bt.at["gap", "p05"], bt.at["gap", "p95"], "bootstrap",
+             f"fund={fund},series=gap"],
+        ]
+        rows[fund] = [[q, fund, *rest] for q, *rest in out]
+    # figure by figure, the funds in config order within each (instructions/08, C)
+    ordered = [rows[f][i] for i in range(len(rows[funds[0]])) for f in funds]
+    return pd.DataFrame(ordered, columns=ANSWERS)
+
+
+def section_8(cfg) -> list[str]:
+    """Steps 8.2 and 8.3: outputs/tables/answers.csv, then README.md from docs/README_template.md."""
+    write_csv(answers(cfg), TABLES / "answers.csv")
+    return []
+
+
+SECTIONS = {1: section_1, 2: section_2, 3: section_3, 4: section_4, 5: section_5, 6: section_6, 7: section_7,
+            8: section_8}
 
 
 def main() -> None:
