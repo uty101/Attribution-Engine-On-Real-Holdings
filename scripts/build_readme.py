@@ -12,7 +12,7 @@ outputs/tables/answers.csv, and every table is a placeholder filled from its CSV
     {table:carino_totals}              a Markdown table built from its CSVs (TABLES below)
 
 Formats: pp (x 100, 1 decimal, "pp"), pct (x 100, 1 decimal, "%"), pct2 (x 100, 2 decimals, "%"),
-num2 and t (2 decimals). Offline; reads only the template and outputs/tables/.
+num2 and t (2 decimals), num3 (3 decimals; instructions/09, A answer 4, for every correlation). Offline; reads only the template and outputs/tables/.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _signed(s: str) -> str:
 
 
 def fmt(x: float, kind: str) -> str:
-    """instructions/08, D.1: pp, pct, pct2, num2 and t."""
+    """instructions/08, D.1: pp, pct, pct2, num2 and t; instructions/09, A answer 4: num3."""
     if kind == "pp":
         return _signed(f"{100 * x:.1f}") + " pp"
     if kind == "pct":
@@ -51,6 +51,8 @@ def fmt(x: float, kind: str) -> str:
         return _signed(f"{100 * x:.2f}") + "%"
     if kind in ("num2", "t"):
         return _signed(f"{x:.2f}")
+    if kind == "num3":
+        return _signed(f"{x:.3f}")
     raise ValueError(f"unknown format {kind!r}")
 
 
@@ -116,7 +118,7 @@ def table_gate(t: dict[str, pd.DataFrame]) -> str:
     rows = []
     for _, g in t["gate"].iterrows():
         b = bt[(bt["fund"] == g["fund"]) & (bt["series"] == "gap")].iloc[0]
-        rows.append([FUND_NAMES[g["fund"]], fmt(g["corr"], "num2"), "Yes" if bool(g["pass"]) else "No",
+        rows.append([FUND_NAMES[g["fund"]], fmt(g["corr"], "num3"), "Yes" if bool(g["pass"]) else "No",
                      str(int(g["n_quarters"])), fmt(g["mean_gap"], "pct2"), fmt(g["std_gap"], "pct2"),
                      fmt(g["mean_abs_gap"], "pct2"), fmt(g["te_gap_ann"], "pct2"),
                      f"{fmt(b['p05'], 'pct2')} to {fmt(b['p95'], 'pct2')}"])

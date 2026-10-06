@@ -958,7 +958,42 @@ def answers(cfg) -> pd.DataFrame:
         rows[fund] = [[q, fund, *rest] for q, *rest in out]
     # figure by figure, the funds in config order within each (instructions/08, C)
     ordered = [rows[f][i] for i in range(len(rows[funds[0]])) for f in funds]
+    if AKRE in funds:
+        ordered += akre_rows(cfg, linked, table("buckets"), table("book_monthly"))
     return pd.DataFrame(ordered, columns=ANSWERS)
+
+
+AKRE = "akre"  # instructions/09, B: these rows are Akre's only
+FICO, FICO_MONTH = "FICO", "2026-09"  # instructions/09, B: FICO's weight at LAST_H and its 2026-09 return
+
+
+def akre_rows(cfg, linked: pd.DataFrame, buckets: pd.DataFrame, book_m: pd.DataFrame) -> list[list]:
+    """Step 9.0 (instructions/09, Section B): the Akre-only rows, after the per-fund rows. The BusEq
+    effects are 1 Carino row of linked.csv; the Other weight range runs over Akre's quarters in
+    buckets.csv; FICO's weight is its POSITION_RETURNS weight at LAST_H; FICO's return is the
+    calendar-month return from month-end adjusted closes (Convention 4.13); the active return is
+    Akre's book_monthly return minus its benchmark's."""
+    blank = (np.nan, np.nan)
+    bench = cfg.entities[AKRE].benchmark
+    lk = linked[(linked["fund"] == AKRE) & (linked["method"] == "carino")].set_index("bucket").loc["BusEq"]
+    other = buckets[(buckets["entity"] == AKRE) & (buckets["bucket"] == "Other")]["weight"]
+    t = holdings_dates(cfg).index(date.fromisoformat(LAST_H)) + 1
+    pos = read_str_csv(PROCESSED / "position_returns.csv").astype({"t": int, "weight": float})
+    w_fico = pos[(pos["entity"] == AKRE) & (pos["t"] == t) & (pos["ticker"] == FICO)]["weight"].sum()
+    r_fico = monthly_returns(load_prices(ROOT / "data")[[FICO]]).at[pd.Period(FICO_MONTH, "M"), FICO]
+    bm = book_m[book_m["month"] == FICO_MONTH].set_index("entity")["ret"]
+    n = buckets[buckets["entity"] == AKRE]["t"].max()
+    out = [
+        [1, "selection_BusEq", lk["selection"], *blank, "linked", f"fund={AKRE},method=carino,bucket=BusEq"],
+        [1, "interaction_BusEq", lk["interaction"], *blank, "linked", f"fund={AKRE},method=carino,bucket=BusEq"],
+        [1, "other_weight_min", other.min(), *blank, "buckets", f"entity={AKRE},bucket=Other,t=1..{n}"],
+        [1, "other_weight_max", other.max(), *blank, "buckets", f"entity={AKRE},bucket=Other,t=1..{n}"],
+        [3, "fico_weight_2026_06_30", w_fico, *blank, "position_returns", f"entity={AKRE},t={t},ticker={FICO}"],
+        [3, "fico_return_2026_09", r_fico, *blank, "adjclose", f"ticker={FICO},month={FICO_MONTH}"],
+        [3, "active_return_2026_09", bm[AKRE] - bm[bench], *blank, "book_monthly",
+         f"entity={AKRE}|{bench},month={FICO_MONTH}"],
+    ]
+    return [[q, AKRE, *rest] for q, *rest in out]
 
 
 def section_8(cfg) -> list[str]:
