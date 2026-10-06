@@ -964,6 +964,9 @@ def answers(cfg) -> pd.DataFrame:
 def section_8(cfg) -> list[str]:
     """Steps 8.2 and 8.3: outputs/tables/answers.csv, then README.md from docs/README_template.md."""
     write_csv(answers(cfg), TABLES / "answers.csv")
+    import build_readme  # scripts/build_readme.py, beside this file
+
+    build_readme.main()
     return []
 
 
