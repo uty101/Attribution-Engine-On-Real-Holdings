@@ -4,10 +4,13 @@
 
 Session 9, close-out (`instructions/09_closeout.md`). Wording and sourcing fixes to the README, 7 Akre-only `answers.csv` rows, and a `num3` format. No method changes. This is the last session of project 4.
 
+Session 9b (`instructions/09b_closeout_fixes.md`) then fixed 3 rendering issues the session 9 questions raised: absolute-value formats for the FICO sentence, a stray comma, and `num4` for correlations.
+
 ## Steps completed
 
 - 9.0 `answers.csv` rows of Section B, `test_answers_trace_to_source` extended to them, `num3`, template fixes C.1 to C.5, README re-rendered — `362ebb7`
 - 9.1 `run_all.py` twice with `git status` clean, `docs/METHODS.md` row definition for `answers.csv`, fresh clone — `8c923c8`
+- 9b.0 `abspct`, `abspp` and `num4` in `scripts/build_readme.py`, `num3` removed; template fixes B.1 to B.3; README re-rendered — `7c393a9`
 
 ## Evidence
 
@@ -186,6 +189,53 @@ git status after run 2:
 
 The only change is the hand edit to `docs/METHODS.md`, which `run_all.py` does not write. Every regenerated table, PNG, PDF and the README were byte-identical to the commit.
 
+### E.4 Session 9b: `README.md` against `45d02d0`, in full
+
+```diff
+diff --git a/README.md b/README.md
+index 60d2ba4..f03fb5f 100644
+--- a/README.md
++++ b/README.md
+@@ -10,11 +10,11 @@ Everything is built from free public data: SEC EDGAR filings, the OpenFIGI mappi
+ 
+ **Allocation, selection and interaction.** Every fund trailed its benchmark over the 28 quarters to September 2026. Akre's book returned 7.2% a year against 16.3% for IVV, a cumulative excess return D of −124.9 pp. Jensen's returned 10.7% against the same 16.3% (D of −84.2 pp), and Polen's 9.8% against 18.8% for IWF (D of −141.5 pp). Selection, not allocation, carried most of it for Akre and Polen. Linked with Carino, Akre's selection is −130.4 pp against allocation of −55.1 pp, and Polen's is −135.6 pp against −23.2 pp. Jensen's loss is also selection, −68.0 pp, with allocation of 2.4 pp. The mean quarterly selection effect is −2.25% for Akre and −1.88% for Polen, and both bootstrap intervals are entirely negative (−3.74% to −0.95%, and −2.74% to −0.97%). Jensen's mean quarterly selection of −1.10% has an interval of −2.32% to 0.11%, which reaches into positive values, so this sample cannot distinguish Jensen's selection from no effect. Only Akre's allocation interval is entirely negative (−1.63% to −0.15%).
+ 
+-**Factors.** Jensen's alpha is −0.32% a month on the book, with a HAC t of −2.23, and −0.36% on the NAV, with a t of −2.42. Polen's is −0.40% on the book (t of −2.06) and −0.52% on the NAV (t of −2.59). Akre's alpha of −0.46% a month on the book (t of −1.39, interval −0.99% to 0.08%) cannot be told apart from no alpha. Its R² of 0.76, against 0.92 for Jensen and 0.93 for Polen, says most of Akre's active risk is stock-specific: its residual volatility is 10.0% a year. Market betas on the book are 0.96 for Akre, 0.88 for Jensen and 1.04 for Polen. Akre's exposures drifted the most: from 2025 its value loading climbed and its investment loading fell away, (Akre's rolling beta chart below).
++**Factors.** Jensen's alpha is −0.32% a month on the book, with a HAC t of −2.23, and −0.36% on the NAV, with a t of −2.42. Polen's is −0.40% on the book (t of −2.06) and −0.52% on the NAV (t of −2.59). Akre's alpha of −0.46% a month on the book (t of −1.39, interval −0.99% to 0.08%) cannot be told apart from no alpha. Its R² of 0.76, against 0.92 for Jensen and 0.93 for Polen, says most of Akre's active risk is stock-specific: its residual volatility is 10.0% a year. Market betas on the book are 0.96 for Akre, 0.88 for Jensen and 1.04 for Polen. Akre's exposures drifted the most: from 2025 its value loading climbed and its investment loading fell away (Akre's rolling beta chart below).
+ 
+-**Active risk.** At 2026-06-30 Akre's active share against IVV was 97.4% and its ex-ante tracking error 13.5%. Jensen's were 61.6% and 5.8%, and Polen's against IWF 61.8% and 8.4%. A few positions carry most of that risk for Akre and Polen: the top positions in each tracking error chart below explain 76.1% of Akre's ex-ante tracking error and 76.5% of Polen's, against 36.5% of Jensen's. Akre's largest single contribution is a position it holds, MA at 1.5 pp. Polen's and Jensen's are names they do not own: NVDA at 1.7 pp and MU at 0.7 pp. Realised tracking error over 84 months is 11.4% for Akre, above its ex-ante mean of 8.8%. The reason is September 2026, the largest active month in the sample: FICO, 8.5% of Akre's book at 2026-06-30, fell −48.4% in the month after the FHFA's September 2026 order letting every GSE lender use VantageScore, and the book trailed IVV by −13.3 pp that month. Jensen's and Polen's realised figures, 5.3% and 6.6%, sit close to their ex-ante means of 5.3% and 6.7%.
++**Active risk.** At 2026-06-30 Akre's active share against IVV was 97.4% and its ex-ante tracking error 13.5%. Jensen's were 61.6% and 5.8%, and Polen's against IWF 61.8% and 8.4%. A few positions carry most of that risk for Akre and Polen: the top positions in each tracking error chart below explain 76.1% of Akre's ex-ante tracking error and 76.5% of Polen's, against 36.5% of Jensen's. Akre's largest single contribution is a position it holds, MA at 1.5 pp. Polen's and Jensen's are names they do not own: NVDA at 1.7 pp and MU at 0.7 pp. Realised tracking error over 84 months is 11.4% for Akre, above its ex-ante mean of 8.8%. The reason is September 2026, the largest active month in the sample: FICO, 8.5% of Akre's book at 2026-06-30, fell 48.4% in the month after the FHFA's September 2026 order letting every GSE lender use VantageScore, and the book trailed IVV by 13.3 pp that month. Jensen's and Polen's realised figures, 5.3% and 6.6%, sit close to their ex-ante means of 5.3% and 6.7%.
+ 
+-**The book against the NAV.** The quarter-start book tracks the fund's NAV closely for all of them: the correlation of quarterly book and NAV returns is 0.990 for Akre, 1.000 for Jensen and 0.998 for Polen. Polen's filing mixes strategies, ETFs included, and its book still tracks the fund's NAV at 0.998. Every mean gap is positive: the book beat the NAV by 0.16% a quarter for Akre, 0.21% for Jensen and 0.39% for Polen. That is the sign fees and cash predict, since the NAV pays fees and holds cash that the book does not. Jensen's and Polen's bootstrap intervals are entirely positive; Akre's runs from −0.07% to 0.39%. The gap's annualised tracking error is 0.59% for Jensen, 1.31% for Polen and 2.79% for Akre.
++**The book against the NAV.** The quarter-start book tracks the fund's NAV closely for all of them: the correlation of quarterly book and NAV returns is 0.9900 for Akre, 0.9996 for Jensen and 0.9982 for Polen. Polen's filing mixes strategies, ETFs included, and its book still tracks the fund's NAV at 0.9982. Every mean gap is positive: the book beat the NAV by 0.16% a quarter for Akre, 0.21% for Jensen and 0.39% for Polen. That is the sign fees and cash predict, since the NAV pays fees and holds cash that the book does not. Jensen's and Polen's bootstrap intervals are entirely positive; Akre's runs from −0.07% to 0.39%. The gap's annualised tracking error is 0.59% for Jensen, 1.31% for Polen and 2.79% for Akre.
+ 
+ ## Results
+ 
+@@ -88,9 +88,9 @@ Table 4 gives the gate for each fund: the correlation of quarterly book and NAV
+ 
+ | Fund | Correlation | Passes | Quarters | Mean gap | Std of gap | Mean abs gap | TE of gap | Mean gap, bootstrap interval |
+ | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+-| Akre | 0.990 | Yes | 26 | 0.16% | 1.39% | 1.07% | 2.79% | −0.07% to 0.39% |
+-| Jensen | 1.000 | Yes | 28 | 0.21% | 0.29% | 0.27% | 0.59% | 0.14% to 0.29% |
+-| Polen | 0.998 | Yes | 28 | 0.39% | 0.66% | 0.53% | 1.31% | 0.27% to 0.52% |
++| Akre | 0.9900 | Yes | 26 | 0.16% | 1.39% | 1.07% | 2.79% | −0.07% to 0.39% |
++| Jensen | 0.9996 | Yes | 28 | 0.21% | 0.29% | 0.27% | 0.59% | 0.14% to 0.29% |
++| Polen | 0.9982 | Yes | 28 | 0.39% | 0.66% | 0.53% | 1.31% | 0.27% to 0.52% |
+ 
+ ## Use it on your own holdings
+ 
+```
+
+### E.5 Session 9b: `run_all.py` after step 9b.0
+
+Before the commit, 1 run of `run_all.py` printed `section 1` to `section 8: all checks passed`, and `git status --short` listed only the 3 hand-edited files (`README.md`, `docs/README_template.md`, `scripts/build_readme.py`). After committing `7c393a9`, a 2nd run also passed all 8 sections, and `git status --short` printed nothing:
+
+```
+run_all exit 0
+git status --short:
+(end)
+```
+
 ## Tests run
 
 ```
@@ -199,6 +249,21 @@ $ .venv/Scripts/python -m pytest -p socket --disable-socket -q     # at 8c923c8
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 84 passed, 1 warning in 45.97s
+```
+
+Session 9b, at `7c393a9`'s tree before the commit (the same 3 files):
+
+```
+$ .venv/Scripts/python -m pytest -p socket --disable-socket -q
+........................................................................ [ 85%]
+............                                                             [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\config\__init__.py:864
+  C:\Utkarsh\10. Quant Projects\6) Attribution Engine On Real Holdings\repo-clone\.venv\Lib\site-packages\_pytest\config\__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; socket
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+84 passed, 1 warning in 61.90s (0:01:01)
 ```
 
 ## Fresh-clone check
@@ -239,6 +304,9 @@ The clone has no `data/processed/` (gitignored), so the `fico_weight_2026_06_30`
 6. **1-ulp parsing.** See E.1. The new rows read their source CSVs the same way the session 8 rows do, and all agree to within 1e-15.
 7. **`docs/METHODS.md`.** The `answers.csv` paragraph said "rows for every fund that passed the gate". That row definition has changed, so 1 sentence now lists the 7 Akre-only rows and their sources. No format is stated there, so nothing about `num3` was needed.
 
+8. **Session 9b: `num3` removed.** After B.3, nothing used `num3`, so it was taken out of `fmt` as B.3 says. `num2` stays, since Table 2 and the Factors paragraph use it for R² and betas.
+9. **Session 9b: the review file.** Instruction 09b asks for evidence but names no review file. As the 01b, 02b and 02c sessions did, it goes into this section's file, `review/section_9.md` (E.4, E.5 and the 9b test output).
+
 ## Not verified
 
 - `ruff` is not installed in the project venv, so no lint was run. The suite and `run_all.py` both import the changed modules.
@@ -251,6 +319,8 @@ Section C was applied word for word. When rendered, 3 of the replacements read b
 1. **C.4 double negatives.** The README now says "fell −48.4%" and "trailed IVV by −13.3 pp". Should these be "fell 48.4%" and "by 13.3 pp", using absolute-value formats or reworded placeholders, or kept as they are?
 2. **C.3 stray comma.** C.3 replaces only the text after "fell away, ", so the sentence now ends "…its investment loading fell away, (Akre's rolling beta chart below)." Should the comma be dropped?
 3. **Jensen's correlation prints as 1.000.** It is 0.99961, and `num3` rounds it to 1.000, the same issue that question 4 raised for Polen under `num2`. Keep it as is?
+
+Session 9b: none. Instruction 09b answered all 5 session 9 questions, and its fixes are applied as written.
 
 ## Files changed
 
@@ -266,7 +336,21 @@ Section C was applied word for word. When rendered, 3 of the replacements read b
 
 Plus this file and `instructions/09_closeout.status.md`.
 
+Session 9b (`7c393a9`):
+
+```
+ README.md               | 12 ++++++------
+ docs/README_template.md |  6 +++---
+ scripts/build_readme.py | 15 ++++++++++-----
+```
+
+Plus this file and `instructions/09b_closeout_fixes.status.md`.
+
 ## Reviewer reads
+
+Session 9b: E.4, the README diff, then E.5.
+
+Session 9:
 
 1. E.2, the README diff.
 2. Open questions 1 to 3.
