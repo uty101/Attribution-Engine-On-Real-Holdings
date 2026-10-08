@@ -4,7 +4,7 @@
 
 This repo takes the quarterly 13F holdings of 3 concentrated quality-growth managers (Akre, Jensen and Polen) and the N-PORT holdings of their ETF benchmarks (IVV for Akre and Jensen, IWF for Polen), and works out where each manager's return against its benchmark came from. Each quarter's book is split into the Fama-French 12 industries (FF12) and attributed with Brinson-Fachler, and the 28 quarters are linked with Carino. Monthly book returns go through a Fama-French 5-factor plus momentum regression with HAC standard errors, and active risk comes from a Ledoit-Wolf covariance of daily returns.
 
-Everything is built from free public data: SEC EDGAR filings, the OpenFIGI mapping API, yfinance prices and Ken French's data library. Each 13F book is checked against the fund's own NAV before it is attributed, and each manager gets a 4-page PDF report in `outputs/reports/`. The method is written out in full in [docs/METHODS.md](docs/METHODS.md).
+Everything is built from free public data: SEC EDGAR filings, the OpenFIGI mapping API, yfinance prices and Ken French's data library. Each 13F book is checked against the fund's own NAV before it is attributed, and each manager gets a 4-page PDF report: [Akre](outputs/reports/akre.pdf), [Jensen](outputs/reports/jensen.pdf) and [Polen](outputs/reports/polen.pdf). Every table behind the figures is a CSV in [outputs/tables](outputs/tables). The method is written out in full in [docs/METHODS.md](docs/METHODS.md).
 
 ## Answers
 
